@@ -1,8 +1,8 @@
 # Configuration
 
 File settings.py contains the parameters for xbmcPD to connect to the XBMC
-instance's httpapi (HOST and PORT), and which port to expose the MPD API for MPD
-clients (MPD_PORT).
+instance's httpapi (XBMC_HOST and XBMC_PORT), and which port to expose the MPD
+API for MPD clients (MPD_PORT).
 
 # Running
 
