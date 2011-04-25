@@ -597,7 +597,7 @@ class MPD(basic.LineReceiver):
                             ['Pos', status['SongNo']],
                             ['Id', status['SongNo']]])
         else:
-            self._send('OK')
+            self._send('')
     
     def lsinfo(self, path='/'):
         """
