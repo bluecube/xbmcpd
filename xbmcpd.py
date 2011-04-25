@@ -99,8 +99,10 @@ class MPD(basic.LineReceiver):
 
         Returns 'UNSUPPORTED REQUEST' if invalid data is received.
         """
+	datacase = data
+	data = data.lower()
         if DEBUG:
-            print 'REQUEST: %s' % data
+            print 'REQUEST: %s' % datacase
         
         if data == 'status':
            #print 'sending status'
@@ -131,7 +133,11 @@ class MPD(basic.LineReceiver):
             print data
             self.plchanges(int(data[11:-1]))
         elif data.startswith('playlistinfo'):
-            self.playlistinfo(int(data[14:-1]))
+	    arg = data[13:-1]
+	    if len(arg) > 0:
+		self.playlistinfo(int(arg))
+	    else:
+		self.playlistinfo()
         elif data.startswith('playlistid'):
             self.playlistinfo(int(data[12:-1]))
         elif data.startswith('search "album"'):
@@ -195,7 +201,7 @@ class MPD(basic.LineReceiver):
         else:
             print 'UNSUPPORTED REQUEST: %s' % data
 
-    def playlistinfo(self, pos):
+    def playlistinfo(self, pos=None):
         """
         Gathers informations about the current playlist.
 
@@ -217,7 +223,14 @@ class MPD(basic.LineReceiver):
                 seperated_playlist.append(templist)
                 templist = []
                 counter = 0
-        self._send_lists(seperated_playlist[pos])
+	if pos is not None:
+	    self._send_lists(seperated_playlist[pos])
+	else:
+	    flattened_list = []
+	    for song in seperated_playlist:
+		for prop in song:
+		    flattened_list.append(prop)
+	    self._send_lists(flattened_list)
 
     def stats(self):
         """
