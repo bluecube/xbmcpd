@@ -176,7 +176,10 @@ class XBMCControl(object):
         Search for a specified albumname.
         """
         self.list_albums()
-        album_id = self.albumdict[albumname]
+	try:
+	    album_id = self.albumdict[albumname]
+	except:
+	    return []
         song_ids = self.send('querymusicdatabase(select idPath,strFileName  from song where idAlbum = %s)' % album_id)
         song_ids = song_ids.replace('<html>\n','').replace('</html>\n', '') \
                                                   .replace('</record>', '') \
