@@ -29,7 +29,8 @@ class MPD(basic.LineReceiver):
     """
     
     def __init__(self):
-        self.xbmc = xbmcnp.XBMCControl(settings.XBMC_HOST, settings.XBMC_PORT)
+        self.xbmc = xbmcnp.XBMCControl(settings.XBMC_HOST, settings.XBMC_PORT,
+		settings.XBMC_USER, settings.XBMC_PASS)
         self.delimiter = '\n'
         self.command_list = False
         self.command_list_ok = True

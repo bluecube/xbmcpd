@@ -18,6 +18,7 @@
 
 import urllib2
 import urllib
+import base64
 from xbmcclient import XBMCClient
 
 class XBMCControl(object):
@@ -25,7 +26,7 @@ class XBMCControl(object):
     Implements a simple way to control basic XBMC library functions.
     """
 
-    def __init__(self, ip, port):
+    def __init__(self, ip, port, user = None, password = None):
         self.ip = ip
         self.port = port
         self.artistdict = {}
@@ -33,6 +34,11 @@ class XBMCControl(object):
         self.genredict = {}
         self.eventclient = XBMCClient('xbmcPD')
         self.eventclient.connect(ip, 9777)
+	if user is not None and password is not None:
+	    encodedstring = base64.encodestring(user + ":" + password)[:-1]
+	    self.auth = "Basic %s" % encodedstring
+	else:
+	    self.auth = None
     
     def send(self, command):
         """
@@ -42,8 +48,9 @@ class XBMCControl(object):
         """
         #print "http://%s:%s/xbmcCmds/xbmcHttp?command=%s" % (self.ip, self.port, urllib.quote(command))
         #print "http://%s:%s/xbmcCmds/xbmcHttp?command=%s" % (self.ip, self.port, urllib.quote(command.encode("utf-8")))
-        xbmcconn = urllib2.urlopen('http://%s:%s/xbmcCmds/xbmcHttp?command=%s' \
-                                    % (self.ip, self.port, urllib.quote(command)))
+	req = urllib2.Request('http://%s:%s/xbmcCmds/xbmcHttp?command=%s' \
+                                    % (self.ip, self.port, urllib.quote(command)), None, {"Authorization": self.auth })
+        xbmcconn = urllib2.urlopen(req)
         rawtext = xbmcconn.read()
         return rawtext
 
