@@ -29,8 +29,7 @@ class MPD(basic.LineReceiver):
     """
     
     def __init__(self):
-        self.xbmc = xbmcnp.XBMCControl(settings.XBMC_HOST, settings.XBMC_PORT,
-		settings.XBMC_USER, settings.XBMC_PASS)
+        self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
         self.command_list = False
         self.command_list_ok = True
@@ -39,7 +38,7 @@ class MPD(basic.LineReceiver):
         self.playlist_dict = {0 : []}
         self.supported_commands = ['status', 'currentsong', 'pause', 'play',
                                    'next', 'previous', 'lsinfo', 'add',
-                                   'deleteid', 'plchanges', 'search', 'setvol',
+                                   'deleteid', 'plchanges', 'setvol',
                                    'list', 'count', 'command_list_ok_begin',
                                    'command_list_end', 'commands',
                                    'notcommands', 'outputs', 'tagtypes',
@@ -143,8 +142,8 @@ class MPD(basic.LineReceiver):
         elif data.startswith('search "album"'):
             #print "searching album..."
             self.search_album(data[16:-1])
-        elif data.startswith('list album') or data.startswith('find album'):
-            self.search_album(data[12:-1])
+        elif data.startswith('list album'):
+            self.list_album(data[12:-1])
         elif data.startswith('setvol'):
             self.set_vol(data[8:-1])
         elif data == 'list "artist"' or data == "list artist":
@@ -189,7 +188,7 @@ class MPD(basic.LineReceiver):
         elif data == 'tagtypes':
             self.tagtypes()
         elif data == 'stats':
-            self.stats()
+            assert data != 'stats' #TODO Implement stats command
         elif data.startswith('playid'):
             self.playid(data[8:-1])
         elif data.startswith("seek"):
@@ -313,10 +312,7 @@ class MPD(basic.LineReceiver):
         """
         Adds a specified path to the playlist.
         """
-        if self.xbmc.get_playlist_length() == 0:
-            self.xbmc.play_file(settings.MUSICPATH+path)
-        else:
-            self.xbmc.add_to_playlist(settings.MUSICPATH+path)
+        self.xbmc.add_to_playlist(settings.MUSICPATH + path)
         self.playlist_id += 1
         self._send()
 
@@ -342,11 +338,12 @@ class MPD(basic.LineReceiver):
         self._send()
 
     def seek(self, song_id, seconds):
-        status = self.xbmc.get_np()
-        if status != None:
-            duration = int(status["Duration"].split(":")[0])*60 + int(status["Duration"].split(":")[1])
-            percentage = float(100/(float(duration) / float(seconds)))
-            self.xbmc.seekto(round(percentage,0))
+        status = self.xbmc.get_status()
+
+        if status == None or status['PlaylistPosition'] != song_id:
+            self.xbmc.playid(song_id)
+
+        self.xbmc.seekto(seconds)
 
         self._send()  
 
@@ -371,10 +368,7 @@ class MPD(basic.LineReceiver):
         Uses _send_lists() to push data to the client
         """
         dates = self.xbmc.list_dates()
-        datelist = []
-        for date in dates:
-            datelist.append(['Date', date])
-        self._send_lists(datelist)
+        self._send_lists((('Date', x) for x in dates))
 
     def list_album_date(self, album):
         """
@@ -392,10 +386,7 @@ class MPD(basic.LineReceiver):
         Uses _send_lists() to push data to the client
         """
         albums = self.xbmc.list_albums()
-        albumlist = []
-        for album in albums:
-            albumlist.append(['Album', album])
-        self._send_lists(albumlist)
+        self._send_lists([('ALbum', x['label']) for x in albums])
 
     def list_album_artist(self, artist):
         """
@@ -404,10 +395,7 @@ class MPD(basic.LineReceiver):
         Uses _send_lists() to push data to the client
         """
         albums = self.xbmc.list_artist_albums(artist)
-        albumlist = []
-        for album in albums:
-            albumlist.append(['Album', album])
-        self._send_lists(albumlist)
+        self._send_lists([('ALbum', x['label']) for x in albums])
         
     def count_artist(self, artist):
         """
@@ -426,10 +414,7 @@ class MPD(basic.LineReceiver):
         Uses _send_lists() to push data to the client
         """
         artists = self.xbmc.list_artists()
-        artistlist = []
-        for artist in artists:
-            artistlist.append(['Artist', artist])
-        self._send_lists(artistlist)
+        self._send_lists([('Artist', x['label']) for x in artists])
 
     def list_genres(self):
         """
@@ -437,35 +422,8 @@ class MPD(basic.LineReceiver):
 
         Uses _send_lists() to push data to the client
         """
-        genres = self.xbmc.list_genres()
-        genrelist = []
-        for genre in genres:
-            genrelist.append(['Genre', genre])
-        self._send_lists(genrelist)
-
-    def search_album(self, album):
-        """
-        Searches for a specified album.
-
-        If albums have been found it uses _send_lists() to push data,
-        otherwise _send() is being used.
-        """
-        if album == '':
-            self._send()
-        else:
-            albuminfo = self.xbmc.search_album(album)
-            playlistlist = []
-            for info in albuminfo:
-                playlistlist.append(['file', info['Path'].replace(settings.MUSICPATH, '')])
-                playlistlist.append(['Time', info['Duration']])
-                playlistlist.append(['Artist', info['Artist']])
-                playlistlist.append(['Title', info['Title']])
-                playlistlist.append(['Album', info['Album']])
-                playlistlist.append(['Track', info['Track number']])
-                playlistlist.append(['Date', info['Release year']])     
-                playlistlist.append(['Genre', info['Genre']])
-            self._send_lists(playlistlist)
-
+        genres = self.xbmc.list_artists()
+        self._send_lists([('Genre', x['label']) for x in genres])
 
     def status(self):
         """
@@ -490,44 +448,42 @@ class MPD(basic.LineReceiver):
 
         Uses _send_lists() to push data to the client
         """
-        status = self.xbmc.get_np()
+        status = self.xbmc.get_status()
         volume = self.xbmc.get_volume()
+        playlist_length = self.xbmc.get_playlist_length()
         if status != None:
-            if status['PlayStatus'] == 'Playing':
-                state = 'play'
-            else:
+            if status['paused']:
                 state = 'pause'
-            time = int(status['Time'].split(':')[0])*60 + \
-                   int(status['Time'].split(':')[1])
-            duration = int(status['Duration'].split(':')[0])*60 + \
-                       int(status['Duration'].split(':')[1])
+            else:
+                state = 'play'
+
             self._send_lists([['volume', volume],
-                        ['repeat', 0],
-                        ['random', 0],
-                        ['single', 0],
-                        ['consume', 0],
-                        ['playlist', self.playlist_id],
-                        ['playlistlength', self.xbmc.get_playlist_length()],
-                        ['xfade', 0],
-                        ['state', state],
-                        ['song', status['SongNo']],
-                        ['songid', status['SongNo']],
-                        ['time', '%s:%s' % (time, duration)],
-                        ['bitrate', status['Bitrate']],
-                        ['audio', status['Samplerate']+':24:2']])
+                ['repeat', 0],
+                ['random', 0],
+                ['single', 0],
+                ['consume', 0],
+                ['playlist', self.playlist_id],
+                ['playlistlength', playlist_length],
+                ['xfade', 0],
+                ['state', state],
+                ['song', status['MusicPlayer.PlaylistPosition']],
+                ['songid', status['MusicPlayer.PlaylistPosition']],
+                ['time', '%s:%s' % (status['time'], status['duration'])],
+                ['bitrate', status['MusicPlayer.BitRate']],
+                ['audio', status['MusicPlayer.SampleRate']+':24:2']])
         else:
             self._send_lists([['volume', volume],
-                        ['repeat', 0],
-                        ['random', 0],
-                        ['single', 0],
-                        ['consume', 0],
-                        ['playlist', self.playlist_id],
-                        ['playlistlength', self.xbmc.get_playlist_length()],
-                        ['xfade', 0],
-                        ['state', 'stop'],
-                        ["song", 0],
-                        ["songid", 0],
-                        ["time", "00:00"]])
+                ['repeat', 0],
+                ['random', 0],
+                ['single', 0],
+                ['consume', 0],
+                ['playlist', self.playlist_id],
+                ['playlistlength', playlist_length],
+                ['xfade', 0],
+                ['state', 'stop'],
+                ["song", 0],
+                ["songid", 0],
+                ["time", "00:00"]])
 
     def plchanges(self, old_playlist_id=0, send=True):
         """
@@ -542,14 +498,14 @@ class MPD(basic.LineReceiver):
         pos = 0
         if playlist != [None]:
             for song in playlist:
-                playlistlist.append(['file', song['Path'].replace(settings.MUSICPATH, '')])
-                playlistlist.append(['Time', song['Duration']])
-                playlistlist.append(['Artist', song['Artist']])
-                playlistlist.append(['Title', song['Title']])
-                playlistlist.append(['Album', song['Album']])
-                playlistlist.append(['Track', song['Track number']])
-                playlistlist.append(['Date', song['Release year']])     
-                playlistlist.append(['Genre', song['Genre']])
+                playlistlist.append(['file', song['file'].replace(settings.MUSICPATH, '')])
+                playlistlist.append(['Time', song['duration']])
+                playlistlist.append(['Artist', song['artist']])
+                playlistlist.append(['Title', song['title']])
+                playlistlist.append(['Album', song['album']])
+                playlistlist.append(['Track', song['track']])
+                playlistlist.append(['Date', song['year']])     
+                playlistlist.append(['Genre', song['genre']])
                 playlistlist.append(['Pos', pos])
                 playlistlist.append(['Id', pos])
                 pos += 1
@@ -595,20 +551,17 @@ class MPD(basic.LineReceiver):
         
         Otherwise a simple 'OK' is returned via _send()
         """
-        status = self.xbmc.get_np()
+        status = self.xbmc.get_current_song()
         if status != None:
-            filepath = status['URL'].split('/')[-1:][0]
-            time = int(status['Duration'].split(':')[0])*60 + \
-                   int(status['Duration'].split(':')[1])
-            self._send_lists([['file', filepath],
-                            ['Time', time],
-                            ['Artist', status['Artist']],
-                            ['Title', status['Title']],
-                            ['Album', status['Album']],
-                            ['Track', status['Track']],
-                            ['Genre', status['Genre']],
-                            ['Pos', status['SongNo']],
-                            ['Id', status['SongNo']]])
+            self._send_lists([['file', status['Player.Filenameandpath'].replace(settings.MUSICPATH, '')],
+                            ['Time', status['duration']],
+                            ['Artist', status['MusicPlayer.Artist']],
+                            ['Title', status['MusicPlayer.Title']],
+                            ['Album', status['MusicPlayer.Album']],
+                            ['Track', status['MusicPlayer.TrackNumber']],
+                            ['Genre', status['MusicPlayer.Genre']],
+                            ['Pos', status['MusicPlayer.PlaylistPosition']],
+                            ['Id', status['MusicPlayer.PlaylistPosition']]])
         else:
             self._send('')
     
@@ -619,25 +572,22 @@ class MPD(basic.LineReceiver):
         Uses _send_lists() to push data to the client
         """
         newpath = settings.MUSICPATH + path
-        subdirs, musicfiles = self.xbmc.get_directory(newpath)
         infolist = []
 
-        for subdir in subdirs:
-            infolist.append(['directory',
-                             subdir.replace(settings.MUSICPATH, '')[:-1]])
+        for f in self.xbmc.get_directory(newpath):
+            path = f['file'].replace(settings.MUSICPATH, '')
 
-        for musicfile in musicfiles:
-            if musicfile == None:
-              continue
-
-            infolist.append(['file', musicfile['Path'].replace(settings.MUSICPATH, '')])
-            infolist.append(['Time', musicfile['Duration']])
-            infolist.append(['Artist', musicfile['Artist']])
-            infolist.append(['Title', musicfile['Title']])
-            infolist.append(['Album', musicfile['Album']])
-            infolist.append(['Track', musicfile['Track number']])
-            infolist.append(['Date', musicfile['Release year']])     
-            infolist.append(['Genre', musicfile['Genre']])
+            if f['filetype'] == 'directory':
+                infolist.append(['directory', path])
+            else:
+                infolist.append(['file', path])
+                infolist.append(['Time', f['duration']])
+                infolist.append(['Artist', f['artist']])
+                infolist.append(['Title', f['title']])
+                infolist.append(['Album', f['album']])
+                infolist.append(['Track', f['track']])
+                infolist.append(['Date', f['year']])     
+                infolist.append(['Genre', f['genre']])
 
         self._send_lists(infolist)
 

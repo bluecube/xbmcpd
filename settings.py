@@ -1,7 +1,4 @@
-XBMC_HOST = "localhost"
-XBMC_PORT = 8080
-XBMC_USER = None
-XBMC_PASS = None
+XBMC_JSONRPC_URL = "http://localhost:8080/jsonrpc"
 
-MPD_PORT = 6600
+MPD_PORT = 6601
 MUSICPATH = "/data/music"

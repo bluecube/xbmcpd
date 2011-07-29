@@ -16,59 +16,106 @@
 # You should have received a copy of the GNU General Public License
 # along with xbmcpd.  If not, see <http://www.gnu.org/licenses/>.
 
-import urllib2
-import urllib
-import base64
-from xbmcclient import XBMCClient
+import jsonrpc.proxy
+from pprint import pprint
 
 class XBMCControl(object):
     """
     Implements a simple way to control basic XBMC library functions.
     """
 
-    def __init__(self, ip, port, user = None, password = None):
-        self.ip = ip
-        self.port = port
-        self.artistdict = {}
-        self.albumdict = {}
-        self.genredict = {}
-        self.eventclient = XBMCClient('xbmcPD')
-        self.eventclient.connect(ip, 9777)
-	if user is not None and password is not None:
-	    encodedstring = base64.encodestring(user + ":" + password)[:-1]
-	    self.auth = "Basic %s" % encodedstring
-	else:
-	    self.auth = None
+    ALL_FIELDS = [
+        'title',
+        'artist',
+        'genre',
+        'year',
+        'album',
+        'track',
+        'duration',
+        'file']
+
+    SUPPORTED_VERSION = 3
+
+    def __init__(self, url):
+        self.call = jsonrpc.proxy.JSONRPCProxy.from_url(url)
+
+        self._check_version()
+
+        #update the temporary data
+        self.list_artists()
+
+    def _check_version(self):
+        jsonrpc_version = self.call.JSONRPC.Version()['version']
+        if jsonrpc_version != self.SUPPORTED_VERSION:
+            raise RuntimeError(
+                'Unsupported protocol version {}.'.format(jsonrpc_version))
     
-    def send(self, command):
-        """
-        Send a command to xbmc.
-
-        Returns a string
-        """
-        #print "http://%s:%s/xbmcCmds/xbmcHttp?command=%s" % (self.ip, self.port, urllib.quote(command))
-        #print "http://%s:%s/xbmcCmds/xbmcHttp?command=%s" % (self.ip, self.port, urllib.quote(command.encode("utf-8")))
-	req = urllib2.Request('http://%s:%s/xbmcCmds/xbmcHttp?command=%s' \
-                                    % (self.ip, self.port, urllib.quote(command)), None, {"Authorization": self.auth })
-        xbmcconn = urllib2.urlopen(req)
-        rawtext = xbmcconn.read()
-        return rawtext
-
-    def get_np(self):
+    def get_current_song(self):
         """
         Get currently playing file.
 
         Returns a dictionary or None.
         """
-        rawtext = self.send('GetCurrentlyPlaying()')
-        infos = (point.rstrip() for point in (rawtext.split('<li>')[1:-1]))
-        infodict = {}
-        for info in infos:
-            infokey, infovalue = info.split(':', 1)
-            infodict[infokey] = infovalue
-        if len(infodict) != 0:
-            return infodict
-        return None
+
+        try:
+            state = self.call.AudioPlayer.State()
+        except jsonrpc.common.RPCError as e:
+            if e.code == -32100:
+                return None
+            else:
+                raise
+
+        labels = self.call.System.GetInfoLabels([
+            'MusicPlayer.Title',
+            'MusicPlayer.Artist',
+            'MusicPlayer.Album',
+            'MusicPlayer.TrackNumber',
+            'MusicPlayer.Genre',
+            'MusicPlayer.Duration',
+            'MusicPlayer.PlaylistPosition',
+            'Player.Filenameandpath'])
+
+        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
+        labels['duration'] = 60 * int(minutes) + int(seconds)
+
+        return labels
+        
+    def get_status(self):
+        """
+        Get status of the music player.
+
+        Returns a dictionary or None.
+        """
+
+        try:
+            state = self.call.AudioPlayer.State()
+        except jsonrpc.common.RPCError as e:
+            if e.code == -32100:
+                return None
+            else:
+                raise
+
+        labels = self.call.System.GetInfoLabels([
+            'MusicPlayer.Title',
+            'MusicPlayer.TrackNumber',
+            'MusicPlayer.Duration',
+            'MusicPlayer.BitRate',
+            'MusicPlayer.SampleRate',
+            'MusicPlayer.Time',
+            'MusicPlayer.PlaylistPosition'])
+        
+        pprint(state)
+        pprint(labels)
+
+        labels['paused'] = state['paused']
+        
+        minutes, seconds = labels['MusicPlayer.Time'].split(':')
+        labels['time'] = 60 * int(minutes) + int(seconds)
+
+        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
+        labels['duration'] = 60 * int(minutes) + int(seconds)
+
+        return labels
         
     def get_volume(self):
         """
@@ -76,56 +123,16 @@ class XBMCControl(object):
 
         Returns an integer.
         """
-        volume = self.send('GetVolume')
-        volume = int(volume.replace('<html>\n','').replace('</html>\n', '') \
-                                                  .replace('<li>', ''))
-        return volume
+        return self.call.XBMC.GetVolume()
 
     def get_directory(self, path):
         """
         Get directory informations.
 
-        Returns a list of subdirectories and a list of musicfiles
+        Returns a list of subdirectories and musicfiles
         """
-        subdirs = self.send('GetDirectory(%s;/)' % path)
-        subdirs = subdirs.replace('<html>\n','').replace('</html>\n', '')
-        subdirs = [dirtydir.strip() for dirtydir in [subdir.split(';')[0] \
-                                    for subdir in subdirs.split('<li>')[1:]]]
-        musicfiles = self.send('GetDirectory(%s;[music])' % path)
-        musicfiles = musicfiles.replace('<html>\n','').replace('</html>\n', '')
-        musicfiles = [self.get_tags_from_filename(tagfile) for tagfile in \
-                      [dirtyfile.strip() for dirtyfile in [musicfile.split(';')[0] \
-                      for musicfile in musicfiles.split('<li>')[1:]]]]
-        return subdirs, musicfiles
-
-    def get_tags_from_filename(self, filename):
-        """
-        Get tags by filename.
-
-        Returns a dictionary
-        """
-        rawtext = self.send('GetTagFromFilename(%s)' % filename)
-        if rawtext != None:
-            infos =  (text.rstrip() for text in (rawtext.split('<li>')[1:-1]))
-            infodict = {}
-            for info in infos:
-                infokey, infovalue = info.split(':', 1)
-                infodict[infokey] = infovalue
-            if len(infodict) != 0:
-                infodict['Path'] = filename
-                return infodict
-
-    def get_library_stats(self):
-        """
-        Get library statistics.
-
-        Returns artistcount, albumcount, songcount and total playtime
-        """
-        artistcount = int(self.send('querymusicdatabase(select count(*) from artist)')[22:-25])
-        albumcount = int(self.send('querymusicdatabase(select count(*) from album)')[22:-25])
-        songcount = int(self.send('querymusicdatabase(select count(*) from song)')[22:-25])
-        totallength = int(self.send('querymusicdatabase(select sum(iDuration) from song)')[22:-25])
-        return artistcount, albumcount, songcount, totallength
+        return self.call.Files.GetDirectory(
+            directory=path, fields=self.ALL_FIELDS)['files'] #TODO: ALL_FIELDS doesn't work here!
 
     def get_current_playlist(self):
         """
@@ -133,97 +140,52 @@ class XBMCControl(object):
 
         Returns a list filled by each file's tags
         """
-        rawtext = self.send('GetPlaylistContents(0)')
-        playlist = [text.rstrip() for text in rawtext.replace('</html>', '') \
-                                                     .split('<li>')[1:]]
-        return [self.get_tags_from_filename(musicfile) for musicfile in \
-                [text.rstrip() for text in rawtext.replace('</html>', '') \
-                                                  .split('<li>')[1:]]]
+        return self.call.AudioPlaylist.GetItems(fields=self.ALL_FIELDS)['items']
 
     def next(self):
         """
         Skip to the next song.
         """
-        self.eventclient.send_action('XBMC.PlayerControl(Next)')
-        #self.send("PlayListNext")
+        self.call.AudioPlayer.SkipNext()
 
     def prev(self):
         """
         Return to the previous song.
         """
-        self.eventclient.send_action('XBMC.PlayerControl(Previous)')
+        self.call.AudioPlayer.SkipPrevious()
 
     def stop(self):
         """
         Stop playing.
         """
-        self.eventclient.send_action('XBMC.PlayerControl(Stop)')
+        self.call.AudioPlayer.Stop()
 
     def set_volume(self, volume):
         """
         Set the volume.
         """
-        self.eventclient.send_action('XBMC.SetVolume(%s)' % volume)
+        self.call.XBMC.SetVolume(volume)
 
     def get_playlist_length(self):
         """
         Get the playlist length.
         """
-        return int(self.send('GetPlaylistLength(0)')[11:-8])
-
-    def search_album(self, albumname):
-        """
-        Search for a specified albumname.
-        """
-        self.list_albums()
-	try:
-	    album_id = self.albumdict[albumname]
-	except:
-	    return []
-        song_ids = self.send('querymusicdatabase(select idPath,strFileName  from song where idAlbum = %s)' % album_id)
-        song_ids = song_ids.replace('<html>\n','').replace('</html>\n', '') \
-                                                  .replace('</record>', '') \
-                                                  .replace('</field>', '')
-        records = song_ids.split('<record>')
-        paths = []
-        for record in records: 
-            fields = record.split('<field>')[1:]
-            if len(fields) == 2:
-                #INEFFICIENT!
-                paths.append(self.send('querymusicdatabase(select strPath from path where idPath = %s)' % fields[0])[22:-25]+fields[1])
-        return [self.get_tags_from_filename(path) for path in paths]
+        return self.call.AudioPlaylist.GetItems(
+            fields=[], limits={'start':0, 'end':1})['limits']['total']
 
     def list_artists(self):
         """
         Returns a list of all artists.
         """
-        if len(self.artistdict) < 1:
-            artists = self.send('querymusicdatabase(select strArtist, idArtist from artist order by strArtist)')
-            artists = artists.replace('<html>\n','').replace('</html>\n', '') \
-                                                    .replace('</record>', '') \
-                                                    .replace('</field>', '')
-            records = artists.split('<record>')
-            for record in records:
-                fields = record.split('<field>')[1:]
-                if len(fields) == 2:
-                    self.artistdict[fields[0]] = fields[1]
-        return self.artistdict.keys()
+        artists = self.call.AudioLibrary.GetArtists(fields=[])['artists']
+        self.artistdict = dict(((x['label'], x['artistid']) for x in artists))
+        return artists
 
     def list_genres(self):
         """
         Returns a list of all genres.
         """
-        if len(self.genredict) < 1:
-            genres = self.send('querymusicdatabase(select strGenre, idGenre from genre order by strGenre)')
-            genres = genres.replace('<html>\n','').replace('</html>\n', '') \
-                                                  .replace('</record>', '') \
-                                                  .replace('</field>', '')
-            records = genres.split('<record>')
-            for record in records:
-                fields = record.split('<field>')[1:]
-                if len(fields) == 2:
-                    self.genredict[fields[0]] = fields[1]
-        return self.genredict.keys()
+        return self.call.AudioLibrary.GetGenres()['genres']
 
     def count_artist(self, artist):
         """
@@ -231,46 +193,39 @@ class XBMCControl(object):
 
         Returns number of songs, total duration
         """
-        self.list_artists()
-        artist_id = self.artistdict[artist]
-        song_count = self.send('querymusicdatabase(select count(*) from song where idArtist =  %s)' % artist_id)[22:-25]
-        duration = self.send('querymusicdatabase(select sum(iDuration) from song where idArtist = %s)' % artist_id)[22:-25]
-        if song_count == '0':
-            duration = 0
-        return song_count, duration
+        response = self.call.MusicLibrary.GetSongs(
+            artistid=self.artistdict[artist], fields=['duration'])
 
-    def seekto(self, percentage):
-        self.send("SeekPercentage(%d)" %percentage)
+        duration = 0
+        for song in response['songs']:
+            duration += song['duration']
+
+        return response['limits']['total'], duration
+
+    def seekto(self, time):
+        """
+        Seek to a given time in a current song.
+        """
+        self.call.AudioPlayer.SeekTime(time)
 
     def playid(self, song_id):
         """
         Play song specified by it's id.
-        
-        Note that the play button will send -1 when playback is stopped (not paused)
-        That's the reason for the first if block.
-        Also it appears to not work if we omit calling (the undocumented) SetCurrentPlaylist before
         """
-        self.send('SetPlaylistSong(%s)' %song_id)
-
-        self.send('SetCurrentPlaylist(0)')
-        if song_id == '-1' or song_id == '0':
-          self.send('PlayListNext(0)')
-        else:
-          self.send('SetPlaylistSong(%s)' %song_id)
+        self.call.AudioPlaylist.Play(song_id)
 
     def playpause(self):
         """
         Toggle play or pause.
         """
-        self.eventclient.send_action('XBMC.PlayerControl(Play)')
-        #self.send('pause')
+        self.call.AudioPlayer.PlayPause()
 
     def remove_from_playlist(self, pos):
         """
         Remove a song (specified by it's position inside the playlist) from
         the playlist.
         """
-        self.send('RemoveFromPlaylist(%s;0)' % pos)
+        self.call.AudioPlaylist.Remove(pos)
     
     def list_artist_albums(self, artist):
         """
@@ -278,12 +233,7 @@ class XBMCControl(object):
 
         Returns a list.
         """
-        self.list_artists()
-        albums = self.send('querymusicdatabase(select strAlbum from album where idArtist = %s)' % self.artistdict[artist])
-        albums = albums.replace('<record><field>', '').replace('<html>','') \
-                                                      .replace('</html>', '') \
-                                                      .replace('\n', '')
-        return albums.split('</field></record>')[:-1]
+        return self.call.AudioLibrary.GetAlbums(artistid=artistdict[artist])['albums']
 
     def list_albums(self):
         """
@@ -291,41 +241,25 @@ class XBMCControl(object):
 
         Returns a list
         """
-        if len(self.albumdict) <1:
-            albums = self.send('querymusicdatabase(select strAlbum, idAlbum from album order by strAlbum)')
-            albums = albums.replace('<html>\n','').replace('</html>\n', '') \
-                                                  .replace('</record>', '') \
-                                                  .replace('</field>', '')
-            records = albums.split('<record>')
-            for record in records:
-                fields = record.split('<field>')[1:]
-                if len(fields) == 2:
-                    self.albumdict[fields[0]] = fields[1]
-        return self.albumdict.keys()
+        albums = self.call.AudioLibrary.GetAlbums(fields=['year'])['albums']
+        self.albumdict = dict(((x['label'], x['albumid']) for x in albums))
+        self.years = (x['year'] for x in albums if x['year'] != 0)
+        return albums
 
     def list_album_date(self, album):
         """
         Get the date of the specified album.
 
         Returns a string
-
-        TODO: Return a nice datetime object?
         """
-        self.list_albums()
-        date = self.send('querymusicdatabase(select iYear from album where idAlbum =  %s)' % self.albumdict[album])[22:-25]
-        return date
-
-    def play_file(self, path):
-        """
-        Play the given path
-        """
-        self.send('PlayFile(%s)' % path)
+        return self.call.AudioLibrary.GetAlbumDetails(
+            albumid=self.albumdict[album], fields=['year'])['year']
 
     def add_to_playlist(self, path):
         """
         Add the given path to the playlist.
         """
-        self.send('AddToPlayList(%s;0)' % path)
+        self.call.AudioPlaylist.Add({'file': path})
 
     def list_dates(self):
         """
@@ -333,8 +267,4 @@ class XBMCControl(object):
 
         Returns a list.
         """
-        dates = self.send('querymusicdatabase(select distinct iYear from album)')
-        dates = dates.replace('<record><field>', '').replace('<html>','') \
-                                                    .replace('</html>', '') \
-                                                    .replace('\n', '')
-        return dates.split('</field></record>')[:-1]
+        return self.dates
