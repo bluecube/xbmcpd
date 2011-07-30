@@ -83,7 +83,7 @@ class MPD(basic.LineReceiver):
             data += "OK"
             if DEBUG:
                 print "RESPONSE: %s" % data
-            self.sendLine(data)
+            self.sendLine(data.encode('utf8'))
 
     
     def connectionMade(self):
