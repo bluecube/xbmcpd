@@ -17,13 +17,12 @@
 # along with xbmcpd.  If not, see <http://www.gnu.org/licenses/>.
 
 import itertools
+import logging
 from twisted.internet import reactor, protocol
 from twisted.protocols import basic
 import xbmcnp
 import settings
 from pprint import pprint
-
-DEBUG = False
 
 class MPD(basic.LineReceiver):
     """
@@ -97,8 +96,7 @@ class MPD(basic.LineReceiver):
                 self.command_list_response += "list_OK\n"
         else:
             data += "OK"
-            if DEBUG:
-                print "RESPONSE: %s" % data
+            logging.debug("RESPONSE: " + data)
             self.sendLine(data.encode('utf8'))
 
     
@@ -116,8 +114,7 @@ class MPD(basic.LineReceiver):
         """
 	datacase = data
 	data = data.lower()
-        if DEBUG:
-            print 'REQUEST: %s' % datacase
+        logging.debug('REQUEST: ' + datacase)
         
         if data == 'status':
            #print 'sending status'
@@ -145,7 +142,6 @@ class MPD(basic.LineReceiver):
         elif data.startswith('plchangesposid'):
             self.plchangesposid(int(data[16:-1]))
         elif data.startswith('plchanges'):
-            print data
             self.plchanges(int(data[11:-1]))
         elif data.startswith('playlistinfo'):
 	    arg = data[13:-1]
@@ -211,10 +207,9 @@ class MPD(basic.LineReceiver):
             seekto = data.replace('"', '').split(' ')           # TODO: replace with regex ?
             self.seek(seekto[1],seekto[2])
         elif data.startswith('pause') or data.startswith('play'):
-            print 'RECEIVED %s, pausing/playing' % data
             self.playpause()
         else:
-            print 'UNSUPPORTED REQUEST: %s' % data
+            logging.error('UNSUPPORTED REQUEST:' + data)
 
     def playlistinfo(self, pos=None):
         """
