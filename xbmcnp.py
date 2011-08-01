@@ -134,7 +134,7 @@ class XBMCControl(object):
         #TODO: Attempting to list a nonexistent directory causes an exception. Detect it.
 
     def list_playlists(self):
-        pass #TODO: Implement this when jsonrpc api supports listing playlists.
+        return [] #TODO: Implement this when jsonrpc api supports listing playlists.
 
     def get_current_playlist(self):
         """
