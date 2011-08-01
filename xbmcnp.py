@@ -43,6 +43,7 @@ class XBMCControl(object):
 
         #update the temporary data
         self.list_artists()
+        self.list_albums()
 
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
@@ -285,7 +286,7 @@ class XBMCControl(object):
         """
         albums = self.call.AudioLibrary.GetAlbums(fields=['year'])['albums']
         self.albumdict = dict(((x['label'], x['albumid']) for x in albums))
-        self.years = (x['year'] for x in albums if x['year'] != 0)
+        self.dates = (x['year'] for x in albums if x['year'] != 0)
         return albums
 
     def list_album_date(self, album):

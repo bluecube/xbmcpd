@@ -171,7 +171,7 @@ class MPD(basic.LineReceiver):
             #                   for x in data[22:-2].split("\"album\"")]
             #self.list_date_artist(artist, album)
             self.list_album_date(data[41:-1])
-        elif data.startswith('list "date"'):
+        elif data.startswith('list "date"') or data.startswith('list date'):
             self.list_dates()
         elif data.startswith('count "artist"'):
             #print "sending artist stats"
