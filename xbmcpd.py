@@ -16,10 +16,12 @@
 # You should have received a copy of the GNU General Public License
 # along with xbmcpd.  If not, see <http://www.gnu.org/licenses/>.
 
+import itertools
 from twisted.internet import reactor, protocol
 from twisted.protocols import basic
 import xbmcnp
 import settings
+from pprint import pprint
 
 DEBUG = False
 
@@ -27,7 +29,9 @@ class MPD(basic.LineReceiver):
     """
     A MusicPlayerDaemon Server emulator.
     """
-    
+
+    SLASHES = '\\/'
+
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
@@ -61,6 +65,18 @@ class MPD(basic.LineReceiver):
                             'stop', 'swap', 'swapid', 'tagtypes', 'update',
                             'urlhandlers', 'volume']
         #self.plchanges(send=False)
+        self.musicpath = settings.MUSICPATH.rstrip(self.SLASHES)
+
+    def _xbmc_path_to_mpd_path(self, path):
+        """
+        Converts a path that xbmc uses (based at filesystem root)
+        to path format for mpd (relative to music path).
+        """
+        assert path.startswith(self.musicpath)
+        return path[len(self.musicpath):].strip(self.SLASHES)
+
+    def _mpd_path_to_xbmc_path(self, path):
+        return self.musicpath + '/' + path.lstrip(self.SLASHES)
 
     def _send_lists(self, datalist):
         """
@@ -125,7 +141,7 @@ class MPD(basic.LineReceiver):
         elif data.startswith('delete'):
             self.delete_id(data[8:-1])
         elif data.startswith('lsinfo'):
-            self.lsinfo(data[8:-1])
+            self.lsinfo(datacase[8:-1])
         elif data.startswith('plchangesposid'):
             self.plchangesposid(int(data[16:-1]))
         elif data.startswith('plchanges'):
@@ -312,7 +328,7 @@ class MPD(basic.LineReceiver):
         """
         Adds a specified path to the playlist.
         """
-        self.xbmc.add_to_playlist(settings.MUSICPATH + path)
+        self.xbmc.add_to_playlist(self.musicpath + path)
         self.playlist_id += 1
         self._send()
 
@@ -565,31 +581,34 @@ class MPD(basic.LineReceiver):
         else:
             self._send('')
     
-    def lsinfo(self, path='/'):
+    def lsinfo(self, path=''):
         """
         Returns informations about the specified path.
 
         Uses _send_lists() to push data to the client
         """
-        newpath = settings.MUSICPATH + path
-        infolist = []
+        filelist = []
+        dirlist = []
+        pllist = []
 
-        for f in self.xbmc.get_directory(newpath):
-            path = f['file'].replace(settings.MUSICPATH, '')
-
+        for f in self.xbmc.get_directory(self._mpd_path_to_xbmc_path(path)):
+            filepath = self._xbmc_path_to_mpd_path(f['file'])
             if f['filetype'] == 'directory':
-                infolist.append(['directory', path])
+                if f['file'].endswith(tuple(self.SLASHES)):
+                    dirlist.append(['directory', filepath])
+                else:
+                    pllist.append(['playlist', filepath])
             else:
-                infolist.append(['file', path])
-                infolist.append(['Time', f['duration']])
-                infolist.append(['Artist', f['artist']])
-                infolist.append(['Title', f['title']])
-                infolist.append(['Album', f['album']])
-                infolist.append(['Track', f['track']])
-                infolist.append(['Date', f['year']])     
-                infolist.append(['Genre', f['genre']])
+                filelist.append(['file', filepath])
+                filelist.append(['Time', f['duration']])
+                filelist.append(['Artist', f['artist']])
+                filelist.append(['Title', f['title']])
+                filelist.append(['Album', f['album']])
+                filelist.append(['Track', f['track']])
+                filelist.append(['Date', f['year']])     
+                filelist.append(['Genre', f['genre']])
 
-        self._send_lists(infolist)
+        self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
 if __name__ == '__main__':
     factory = protocol.ServerFactory()

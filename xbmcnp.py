@@ -104,9 +104,6 @@ class XBMCControl(object):
             'MusicPlayer.Time',
             'MusicPlayer.PlaylistPosition'])
         
-        pprint(state)
-        pprint(labels)
-
         labels['paused'] = state['paused']
         
         minutes, seconds = labels['MusicPlayer.Time'].split(':')
@@ -131,8 +128,10 @@ class XBMCControl(object):
 
         Returns a list of subdirectories and musicfiles
         """
-        return self.call.Files.GetDirectory(
-            directory=path, fields=self.ALL_FIELDS)['files'] #TODO: ALL_FIELDS doesn't work here!
+        return self.call.Files.GetDirectory(directory=path,
+            fields=self.ALL_FIELDS,
+            media='music')['files']
+        #TODO: Attempting to list a nonexistent directory causes an exception. Detect it.
 
     def get_current_playlist(self):
         """
