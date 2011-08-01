@@ -608,6 +608,11 @@ class MPD(basic.LineReceiver):
                 filelist.append(['Date', f['year']])     
                 filelist.append(['Genre', f['genre']])
 
+        if path.lstrip(self.SLASHES) == '':
+            for pl in self.xbmc.list_playlists():
+                pllist.append(['playlist', pl['label']])
+                
+
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
 if __name__ == '__main__':
