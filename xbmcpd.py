@@ -200,7 +200,7 @@ class MPD(basic.LineReceiver):
         elif data == 'tagtypes':
             self.tagtypes()
         elif data == 'stats':
-            assert data != 'stats' #TODO Implement stats command
+            self.stats()
         elif data.startswith('playid'):
             self.playid(data[8:-1])
         elif data.startswith("seek"):
@@ -242,20 +242,30 @@ class MPD(basic.LineReceiver):
 		    flattened_list.append(prop)
 	    self._send_lists(flattened_list)
 
+    def status(self):
+        """
+        Player status from xbmc.
+
+        Uses _send_lists() to push data to the client
+        """
+        status = self.xbmc.get_status()
+
+        self._send_lists(
+            itertools.chain([[x, status[x]] for x in status.keys()],  
+            [['volume', self.xbmc.get_volume()],
+            ['consume', 0],
+            ['playlist', self.playlist_id],
+            ['playlistlength', self.xbmc.get_playlist_length()]]))
+
     def stats(self):
         """
         Fetches library statistics from xbmc.
 
         Uses _send_lists() to push data to the client
         """
-        artistcount, albumcount, songcount, totallength = self.xbmc.get_library_stats()
-        self._send_lists([['artists', artistcount],
-                          ['albums', albumcount],
-                          ['songs', songcount],
-                          ['uptime', 1],
-                          ['playtime', 0],
-                          ['db_playtime', totallength],
-                          ['db_update', 1252868674]])
+        stats = self.xbmc.get_library_stats()
+        self._send_lists([[x, stats[x]] for x in stats.keys()])
+        
 
     def tagtypes(self):
         """
@@ -435,66 +445,6 @@ class MPD(basic.LineReceiver):
         """
         genres = self.xbmc.list_artists()
         self._send_lists([('Genre', x['label']) for x in genres])
-
-    def status(self):
-        """
-        Returns the current status.
-
-        If there is no song, the following information is pushed to the client:
-            * Volume
-            * Repeat on/off
-            * Random on/off
-            * Single on/off
-            * Consume on/off
-            * Playlist
-            * Playlistlength
-            * Fade on/off
-            * State (play/pause/stop)
-        If a song is played, this information is beeing added:
-            * Song
-            * Song ID
-            * Time (time:duration)
-            * Bitrate
-            * Samplerate
-
-        Uses _send_lists() to push data to the client
-        """
-        status = self.xbmc.get_status()
-        volume = self.xbmc.get_volume()
-        playlist_length = self.xbmc.get_playlist_length()
-        if status != None:
-            if status['paused']:
-                state = 'pause'
-            else:
-                state = 'play'
-
-            self._send_lists([['volume', volume],
-                ['repeat', 0],
-                ['random', 0],
-                ['single', 0],
-                ['consume', 0],
-                ['playlist', self.playlist_id],
-                ['playlistlength', playlist_length],
-                ['xfade', 0],
-                ['state', state],
-                ['song', status['MusicPlayer.PlaylistPosition']],
-                ['songid', status['MusicPlayer.PlaylistPosition']],
-                ['time', '%s:%s' % (status['time'], status['duration'])],
-                ['bitrate', status['MusicPlayer.BitRate']],
-                ['audio', status['MusicPlayer.SampleRate']+':24:2']])
-        else:
-            self._send_lists([['volume', volume],
-                ['repeat', 0],
-                ['random', 0],
-                ['single', 0],
-                ['consume', 0],
-                ['playlist', self.playlist_id],
-                ['playlistlength', playlist_length],
-                ['xfade', 0],
-                ['state', 'stop'],
-                ["song", 0],
-                ["songid", 0],
-                ["time", "00:00"]])
 
     def plchanges(self, old_playlist_id=0, send=True):
         """

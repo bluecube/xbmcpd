@@ -79,40 +79,70 @@ class XBMCControl(object):
         labels['duration'] = 60 * int(minutes) + int(seconds)
 
         return labels
-        
-    def get_status(self):
-        """
-        Get status of the music player.
 
-        Returns a dictionary or None.
-        """
+    def get_library_stats(self):
+        ret = {}
+        ret["artists"] = self.call.AudioLibrary.GetSongs(
+            limits={'start':0, 'end':1})['limits']['total']
+        ret["albums"] = self.call.AudioLibrary.GetAlbums(
+            limits={'start':0, 'end':1})['limits']['total']
+
+        songs = self.call.AudioLibrary.GetSongs(fields=["duration"])
+        
+        ret["songs"] = songs['limits']['total']
+
+        ret["db_playtime"] = sum([x["duration"] for x in songs["songs"]])
+
+        return ret
+
+    def get_status(self):
+        ret = {}
 
         try:
-            state = self.call.AudioPlayer.State()
-        except jsonrpc.common.RPCError as e:
-            if e.code == -32100:
-                return None
+            state = self.call.AudioPlaylist.State()
+
+            if state["repeat"] == "all":
+                ret["repeat"] = 1
+                ret["single"] = 0
+            elif state["repeat"] == "one":
+                ret["repeat"] = 1
+                ret["single"] = 1
             else:
+                ret["repeat"] = 0
+
+            if state["shuffled"]:
+                ret["random"] = 1
+            else:
+                ret["random"] = 0
+
+
+            assert state["playing"]
+            if state["paused"]:
+                ret["state"] = "paused"
+
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32100:
                 raise
 
+            ret["single"] = 0
+            ret["repeat"] = 0
+            ret["random"] = 0
+            ret["state"] = "stop"
+
         labels = self.call.System.GetInfoLabels([
-            'MusicPlayer.Title',
-            'MusicPlayer.TrackNumber',
-            'MusicPlayer.Duration',
             'MusicPlayer.BitRate',
             'MusicPlayer.SampleRate',
             'MusicPlayer.Time',
             'MusicPlayer.PlaylistPosition'])
         
-        labels['paused'] = state['paused']
-        
         minutes, seconds = labels['MusicPlayer.Time'].split(':')
-        labels['time'] = 60 * int(minutes) + int(seconds)
+        ret["time"] = 60 * int(minutes) + int(seconds)
 
-        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
-        labels['duration'] = 60 * int(minutes) + int(seconds)
+        ret["bitrate"] = labels['MusicPlayer.BitRate']
+        ret["audio"] = labels["MusicPlayer.SampleRate"] + ":24:2"
+        ret["song"] = labels["MusicPlayer.PlaylistPosition"]
 
-        return labels
+        return ret
         
     def get_volume(self):
         """
