@@ -160,7 +160,11 @@ class XBMCControl(object):
         """
         Stop playing.
         """
-        self.call.AudioPlayer.Stop()
+        try:
+            self.call.AudioPlayer.Stop()
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32100:
+                raise
 
     def set_volume(self, volume):
         """
@@ -220,7 +224,13 @@ class XBMCControl(object):
         """
         Toggle play or pause.
         """
-        self.call.AudioPlayer.PlayPause()
+        try:
+            self.call.AudioPlayer.PlayPause()
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32100:
+                raise
+
+            self.call.AudioPlaylist.Play(0)
 
     def remove_from_playlist(self, pos):
         """
