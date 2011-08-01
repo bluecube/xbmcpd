@@ -166,7 +166,7 @@ class XBMCControl(object):
         """
         Set the volume.
         """
-        self.call.XBMC.SetVolume(volume)
+        self.call.XBMC.SetVolume(int(volume))
 
     def get_playlist_length(self):
         """
