@@ -52,31 +52,75 @@ class MPDError(Exception):
 
 
 class Command:
-    def __init__(self, text):
+    def __init__(self, text, mpd):
         """
         Split and unescape line of commands and arguments.
         """
         split = re.findall(r'"((?:[^\\]|\\"|\\\\)*)"|([^ \t]+)', text)
-        self._tuple = tuple((re.sub(r'\\("|\\)', r'\1', x[0] + x[1]) for x in split))
+        split = tuple((Argument(x[0] + x[1], mpd) for x in split))
 
         self._text = text
-        self._name = self._tuple[0].lower()
+        self._name = split[0].lower()
+        self.args = split[1:]
+
+        self._mpd = mpd
 
     def __str__(self):
         return self._text
 
-    def __iter__(self):
-        return iter(self._tuple)
-
-    def __getitem__(self, index):
-        return self._tuple[index]
-
-    def __len__(self):
-        return len(self._tuple)
-
     def name(self):
+        """
+        Return the command name (first item on the line in lowercase).
+        """
         return self._name
-    
+
+    def check_arg_count(self, min_count, max_count = None):
+        """
+        Check that argument count is between min_count and max_count or
+        raise an mpd error.
+        """
+        if not max_count:
+            max_count = min_count
+
+        if len(self.args) < min_count or len(self.args) > max_count:
+            raise MPDError(self._mpd, MPDError.ACK_ERROR_ARG,
+                'wrong number of arguments for "{}"'.format(self._mpd.current_command))
+
+class Argument(unicode):
+    def __new__(cls, escaped, mpd):
+        return unicode.__new__(unicode, re.sub(r'\\("|\\)', r'\1', escaped))
+
+    def __init__(self, escaped, mpd):
+        self._mpd = mpd
+
+    def _exception(self, text):
+        raise MPDError(self._mpd, MPDError.ACK_ERROR_ARG, text)
+
+    def as_range(self):
+        """
+        Convert mpd range from string to a python range object.
+        """
+        try:
+            split = self.split(':')
+            if len(split) == 1:
+                return [self._parse_int(text)]
+            elif len(split) == 2:
+                return range(self._int(split[0]), self._int(split[1]))
+            else:
+                self._exception('need a range')
+        except ValueError:
+            self._exception('need a number')
+
+    def as_int(self, text):
+        """
+        Convert text to int, or raise MPD error if this fails.
+        """
+        try:
+            return int(text)
+        except ValueError:
+            self._exception('need a number')
+
+
 class MPD(twisted.protocols.basic.LineOnlyReceiver):
     """
     A MusicPlayerDaemon Server emulator.
@@ -163,7 +207,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Receives data and takes the specified actions.
         """
 
-        command = Command(data)
+        command = Command(data, self)
 
         if command.name() == 'command_list_begin':
             logging.debug('command list started')
