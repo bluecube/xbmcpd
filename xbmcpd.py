@@ -140,8 +140,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
         self.command_list = []
-        self.command_list_ok = True
+        self.command_list_ok = False
         self.command_list_started = False
+        self.command_list_position = 0
+        self.current_command = ''
         self.playlist_id = 1
         self.playlist_dict = {0 : []}
         #self.plchanges(send=False)
