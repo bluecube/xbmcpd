@@ -580,6 +580,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%x %X')
+
     factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD
     twisted.internet.reactor.listenTCP(settings.MPD_PORT, factory)
