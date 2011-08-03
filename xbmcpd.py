@@ -135,6 +135,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'notcommands', 'outputs', 'tagtypes',
         'playid','stop','seek','plchangesposid'}
 
+    TAG_TYPES = ('Artist', 'Album', 'Title', 'Track', 'Name', 'Genre', 'Date')
+
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
@@ -185,7 +187,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 getattr(self, command.name())(command)
 
                 if self.command_list_ok:
-                    self._send_line('list_OK')
+                    self._send_line(u'list_OK')
         except MPDError as e:
             logging.error(error.text)
             self._send_line(unicode(error))
@@ -232,12 +234,16 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self.command_list = [command]
             self._process_command_list()
 
-    def playlistinfo(self, pos=None):
-        """
-        Gathers informations about the current playlist.
+    def playlistinfo(self, command):
+        command.check_arg_count(0, 1)
 
-        Uses _send_lists() to push data to the client
-        """
+        playlist_length = self.xbmc.get_playlist_length()
+
+        if len(command.args) == 1:
+            items = command.args[0].as_range()
+        else:
+            items = range(playlist_length)
+
         try:
             playlist = self.playlist_dict[self.playlist_id]
         except:
@@ -263,84 +269,72 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 		    flattened_list.append(prop)
 	    self._send_lists(flattened_list)
 
-    def status(self):
+    def status(self, command):
         """
         Player status from xbmc.
 
         Uses _send_lists() to push data to the client
         """
+        command.check_arg_count(0)
         status = self.xbmc.get_status()
-
         self._send_lists(
-            itertools.chain([[x, status[x]] for x in status.keys()],  
+            itertools.chain([[x, status[x]] for x in status.keys()],
             [['volume', self.xbmc.get_volume()],
             ['consume', 0],
             ['playlist', self.playlist_id],
             ['playlistlength', self.xbmc.get_playlist_length()]]))
 
-    def stats(self):
+    def stats(self, command):
         """
         Fetches library statistics from xbmc.
 
         Uses _send_lists() to push data to the client
         """
+        command.check_arg_count(0)
         stats = self.xbmc.get_library_stats()
         self._send_lists([[x, stats[x]] for x in stats.keys()])
-        
 
-    def tagtypes(self):
+
+    def tagtypes(self, command):
         """
         Sends a list of supported tagtypes.
-
-        Uses _send_lists() to push data to the client
         """
-        tags = ['Artist', 'Album', 'Title', 'Track', 'Name', 'Genre', 'Date']
-        templist = []
-        for tag in tags:
-            templist.append(['tagtype', tag])
-        self._send_lists(templist)
+        command.check_arg_count(0)
+        self._send_lists((('tagtype', tag) for tag in self.TAG_TYPES))
 
-    def commands(self):
+    def commands(self, command):
         """
         Sends a list of supported commands.
-
-        Uses _send_lists() to push data to the client
         """
-        templist = []
-        for i in self.supported_commands:
-            templist.append(["command", i])
-        self._send_lists(templist)
+        command.check_arg_count(0)
+        self._send_lists((('command', cmd) for cmd in self.SUPPORTED_COMMANDS))
 
-    def outputs(self):
+    def outputs(self, command):
         """
         Sends a list of configured outputs.
-
-        Uses _send_lists() to push data to the client
         """
+        command.check_arg_count(0)
         templist = [['outputid', 0],
-                    ['outputname', 'default detected output'],
+                    ['outputname', 'default output'],
                     ['outputenabled', 1]]
         self._send_lists(templist)
-        
 
-    def notcommands(self):
-        """
-        Sends a list of unsupported commands.
-        
-        Uses _send_lists() to push data to the client
-        """
-        unsupported = set(self.all_commands) ^ set(self.supported_commands)
-        templist = []
-        for i in unsupported:
-            templist.append(['command', i])
-        self._send_lists(templist)
+    def notcommands(self, commands):
+        command.check_arg_count(0)
+        # don't talk about commands we don't support :-)
 
-    def set_vol(self, volume):
+    def setvol(self, command):
         """
         Sets the volume.
         """
+        command.check_arg_count(1)
+
+        volume = command.args[0].as_int()
+
+        if volume < 0 or volume > 100:
+            raise MPDError(self, MPDError.ACK_ERROR_ARG, u"Invalid volume value")
+
         self.xbmc.set_volume(volume)
-        self._send()
 
     def delete_id(self, song_id):
         """
@@ -350,58 +344,61 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.playlist_id += 1
         self._send()
 
-    def add(self, path):
+    def add(self, command):
         """
         Adds a specified path to the playlist.
         """
-        self.xbmc.add_to_playlist(self.musicpath + path)
-        self.playlist_id += 1
-        self._send()
+        command.check_arg_count(1)
 
-    def next(self):
+        path = command.args[0]
+        self.xbmc.add_to_playlist(self._mpd_path_to_xbmc_path(path))
+        self.playlist_id += 1
+
+    def next(self, command):
         """
         Skip to the next song in the playlist.
         """
+        command.check_arg_count(0)
         self.xbmc.next()
-        self._send()
 
-    def previous(self):
+    def previous(self, command):
         """
         Return to the previous song in the playlist.
         """
+        command.check_arg_count(0)
         self.xbmc.prev()
-        self._send()
 
-    def stop(self):
+    def stop(self, command):
         """
         Stop playing.
         """
+        command.check_arg_count(0)
         self.xbmc.stop()
-        self._send()
 
-    def seek(self, song_id, seconds):
-        status = self.xbmc.get_status()
+    def seek(self, command):
+        """
+        Seek to given song and time.
+        """
+        command.check_arg_count(2)
 
-        if status == None or status['PlaylistPosition'] != song_id:
-            self.xbmc.playid(song_id)
-
+        self.xbmc.playid(song_id)
         self.xbmc.seekto(seconds)
 
-        self._send()  
+        self._send()
 
     def playid(self, song_id):
         """
         Get a song by it's id and play it.
         """
         self.xbmc.playid(song_id)
-        self._send()    
+        self._send()
 
     def playpause(self):
         """
         Toggle play or pause.
         """
         self.xbmc.playpause()
-        self._send()    
+        self._send()
 
     def list_dates(self):
         """
@@ -438,7 +435,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         albums = self.xbmc.list_artist_albums(artist)
         self._send_lists([('ALbum', x['label']) for x in albums])
-        
+
     def count_artist(self, artist):
         """
         Returns the number of all songs in the library and the total playtime.
@@ -447,7 +444,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         count = self.xbmc.count_artist(artist)
         self._send_lists([['songs', count[0]],
-                          ['playtime', count[1]]])                      
+                          ['playtime', count[1]]])
 
     def list_artists(self):
         """
@@ -480,18 +477,25 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         pos = 0
         if playlist != [None]:
             for song in playlist:
-                playlistlist.append(['file', song['file'].replace(settings.MUSICPATH, '')])
-                playlistlist.append(['Time', song['duration']])
-                playlistlist.append(['Artist', song['artist']])
-                playlistlist.append(['Title', song['title']])
-                playlistlist.append(['Album', song['album']])
-                playlistlist.append(['Track', song['track']])
-                playlistlist.append(['Date', song['year']])     
-                playlistlist.append(['Genre', song['genre']])
+                playlistlist.append(['file', song['file'].replace(self.musicpath, '')])
+                if 'duration' in song:
+                    playlistlist.append(['Time', song['duration']])
+                if 'artist' in song:
+                    playlistlist.append(['Artist', song['artist']])
+                if 'title' in song:
+                    playlistlist.append(['Title', song['title']])
+                if 'album' in song:
+                    playlistlist.append(['Album', song['album']])
+                if 'track' in song:
+                    playlistlist.append(['Track', song['track']])
+                if 'year' in song:
+                    playlistlist.append(['Date', song['year']])
+                if 'genre' in song:
+                    playlistlist.append(['Genre', song['genre']])
                 playlistlist.append(['Pos', pos])
                 playlistlist.append(['Id', pos])
                 pos += 1
-            
+
             self.playlist_dict[self.playlist_id] = playlistlist
             old_playlist = (tuple(info) for info in self.playlist_dict[old_playlist_id])
             diff = []
@@ -509,15 +513,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         This should actually not call plchanges.
         The correct implementation would be:
 
-        "This function only returns the position and the id of the changed song, 
+        "This function only returns the position and the id of the changed song,
         not the complete metadata. This is more bandwidth efficient."
 
         But it shall work for now - TODO : As stated above !
         """
-        
+
         self.plchanges(old_playlist_id,send)
 
-    def currentsong(self):
+    def currentsong(self, command):
         """
         Returns informations about the current song.
 
@@ -530,29 +534,36 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             * Genre
             * Position
             * ID
-        
+
         Otherwise a simple 'OK' is returned via _send()
         """
+        command.check_arg_count(0)
+
         status = self.xbmc.get_current_song()
-        if status != None:
-            self._send_lists([['file', status['Player.Filenameandpath'].replace(settings.MUSICPATH, '')],
-                            ['Time', status['duration']],
-                            ['Artist', status['MusicPlayer.Artist']],
-                            ['Title', status['MusicPlayer.Title']],
-                            ['Album', status['MusicPlayer.Album']],
-                            ['Track', status['MusicPlayer.TrackNumber']],
-                            ['Genre', status['MusicPlayer.Genre']],
-                            ['Pos', status['MusicPlayer.PlaylistPosition']],
-                            ['Id', status['MusicPlayer.PlaylistPosition']]])
-        else:
-            self._send('')
-    
-    def lsinfo(self, path=''):
+        if status == None:
+            return
+
+        self._send_lists([['file', status['Player.Filenameandpath'].replace(self.musicpath, '')],
+            ['Time', status['duration']],
+            ['Artist', status['MusicPlayer.Artist']],
+            ['Title', status['MusicPlayer.Title']],
+            ['Album', status['MusicPlayer.Album']],
+            ['Track', status['MusicPlayer.TrackNumber']],
+            ['Genre', status['MusicPlayer.Genre']],
+            ['Pos', status['MusicPlayer.PlaylistPosition']],
+            ['Id', status['MusicPlayer.PlaylistPosition']]])
+
+    def lsinfo(self, command):
         """
         Returns informations about the specified path.
-
-        Uses _send_lists() to push data to the client
         """
+        command.check_arg_count(0, 1)
+
+        if len(command.args) == 1:
+            path = command.args[0]
+        else:
+            path = ''
+
         filelist = []
         dirlist = []
         pllist = []
@@ -571,13 +582,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 filelist.append(['Title', f['title']])
                 filelist.append(['Album', f['album']])
                 filelist.append(['Track', f['track']])
-                filelist.append(['Date', f['year']])     
+                filelist.append(['Date', f['year']])
                 filelist.append(['Genre', f['genre']])
 
         if path.lstrip(self.SLASHES) == '':
             for pl in self.xbmc.list_playlists():
                 pllist.append(['playlist', pl['label']])
-                
+
 
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
