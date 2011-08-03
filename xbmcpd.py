@@ -41,14 +41,14 @@ class MPDError(Exception):
     ACK_ERROR_EXIST = 56
 
     def __init__(self, mpd, code, text):
-        self._code = code
-        self._position = mpd.command_list_position
-        self._command = mpd.current_command
-        self._text = text
+        self.code = code
+        self.position = mpd.command_list_position
+        self.command = mpd.current_command
+        self.text = text
 
     def __unicode__(self):
         return u'ACK [{}@{}] {{{}}} {}'.format(
-            self._code, self._position, self._command, self._text)
+            self.code, self.position, self.command, self.text)
 
 
 class Command:
@@ -189,8 +189,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 if self.command_list_ok:
                     self._send_line(u'list_OK')
         except MPDError as e:
-            logging.error(error.text)
-            self._send_line(unicode(error))
+            logging.error(e.text)
+            self._send_line(unicode(e))
         except Exception as e:
             logging.critical(u'Caught an exception!', exc_info=True)
             self._send_line(unicode(MPDError(
