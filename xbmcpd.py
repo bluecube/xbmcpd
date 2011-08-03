@@ -46,8 +46,8 @@ class MPDError(Exception):
         self._command = mpd.current_command
         self._text = text
 
-    def __str__(self):
-        return 'ACK [{}@{}] {{{}}} {}'.format(
+    def __unicode__(self):
+        return u'ACK [{}@{}] {{{}}} {}'.format(
             self._code, self._position, self._command, self._text)
 
 
@@ -56,7 +56,7 @@ class Command:
         """
         Split and unescape line of commands and arguments.
         """
-        split = re.findall(r'"((?:[^\\]|\\"|\\\\)*)"|([^ \t]+)', text)
+        split = re.findall(ur'"((?:[^\\]|\\"|\\\\)*)"|([^ \t]+)', text)
         split = tuple((Argument(x[0] + x[1], mpd) for x in split))
 
         self._text = text
@@ -65,7 +65,7 @@ class Command:
 
         self._mpd = mpd
 
-    def __str__(self):
+    def __unicode__(self):
         return self._text
 
     def name(self):
@@ -88,7 +88,7 @@ class Command:
 
 class Argument(unicode):
     def __new__(cls, escaped, mpd):
-        return unicode.__new__(unicode, re.sub(r'\\("|\\)', r'\1', escaped))
+        return unicode.__new__(unicode, re.sub(ur'\\("|\\)', ur'\1', escaped))
 
     def __init__(self, escaped, mpd):
         self._mpd = mpd
@@ -163,13 +163,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Pushes a list of information to the client.
         """
         for pair in datalist:
-            self.sendLine("{}: {}".format(i[0], i[1]))
+            self._send_line(u"{}: {}".format(pair[0], pair[1]))
 
     def _process_command_list(self):
         try:
             for i, command in enumerate(self.command_list):
-                logging.debug('command {} of {}: {}'.format(
-                    i, len(self.command_list), str(command)))
+                logging.debug(u'command {} of {}: {}'.format(
+                    i, len(self.command_list), unicode(command)))
 
                 #for nice error messages:
                 self.command_list_position = i
@@ -178,49 +178,50 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 if command.name() not in self.SUPPORTED_COMMANDS:
                     self.current_command = ''
                     raise MPDError(self, MPDError.ACK_ERROR_UNKNOWN,
-                        '"unknown command "{}"'.format(command.name()))
+                        u'"unknown command "{}"'.format(command.name()))
 
                 #actually handle the command
                 getattr(self, command.name())(command)
 
                 if self.command_list_ok:
-                    self.sendLine('list_OK')
+                    self._send_line('list_OK')
         except MPDError as e:
             logging.error(error.text)
-            self.sendLine(str(error))
+            self._send_line(unicode(error))
         except Exception as e:
-            logging.critical('Caught an exception!', exc_info=True)
-            self.sendLine(str(MPDError(
-                self, MPDError.ACK_ERROR_SYSTEM, 'Internal server error, sorry.')))
+            logging.critical(u'Caught an exception!', exc_info=True)
+            self._send_line(unicode(MPDError(
+                self, MPDError.ACK_ERROR_SYSTEM, u'Internal server error, sorry.')))
         else:
-            logging.debug('OK')
-            self.sendLine('OK')
+            logging.debug(u'OK')
+            self._send_line('OK')
+
+    def _send_line(self, line):
+        encoded = line.encode('utf8')
+        self.sendLine(encoded)
 
     def connectionMade(self):
-        """
-        Connection established.
-        """
-        self.sendLine('OK MPD 0.16.0')
-    
+        self._send_line(u'OK MPD 0.16.0')
+
     def lineReceived(self, data):
         """
         Receives data and takes the specified actions.
         """
 
-        command = Command(data, self)
+        command = Command(data.decode('utf8'), self)
 
-        if command.name() == 'command_list_begin':
-            logging.debug('command list started')
+        if command.name() == u'command_list_begin':
+            logging.debug(u'command list started')
             self.command_list = []
             self.command_list_started = True
             self.command_list_ok = False
-        elif command.name() == 'command_list_ok_begin':
-            logging.debug('command list started')
+        elif command.name() == u'command_list_ok_begin':
+            logging.debug(u'command list started')
             self.command_list = []
             self.command_list_started = True
             self.command_list_ok = True
-        elif command.name() == 'command_list_end':
-            logging.debug('command list ended')
+        elif command.name() == u'command_list_end':
+            logging.debug(u'command list ended')
             self._process_command_list()
             self.command_list_started = False
             self.command_list_ok = False
@@ -580,7 +581,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s', datefmt='%x %X')
+    logging.basicConfig(level=logging.DEBUG, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
 
     factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD
