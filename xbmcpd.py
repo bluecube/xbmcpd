@@ -19,8 +19,9 @@
 import itertools
 import logging
 import re
-from twisted.internet import reactor, protocol
-from twisted.protocols import basic
+import twisted.internet.reactor
+import twisted.internet.protocol
+import twisted.protocols.basic
 import xbmcnp
 import settings
 from pprint import pprint
@@ -76,7 +77,7 @@ class Command:
     def name(self):
         return self._name
     
-class MPD(basic.LineReceiver):
+class MPD(twisted.protocols.basic.LineOnlyReceiver):
     """
     A MusicPlayerDaemon Server emulator.
     """
@@ -531,7 +532,7 @@ class MPD(basic.LineReceiver):
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
 
 if __name__ == '__main__':
-    factory = protocol.ServerFactory()
+    factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD
-    reactor.listenTCP(settings.MPD_PORT, factory)
-    reactor.run()
+    twisted.internet.reactor.listenTCP(settings.MPD_PORT, factory)
+    twisted.internet.reactor.run()
