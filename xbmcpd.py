@@ -84,7 +84,7 @@ class Command:
 
         if len(self.args) < min_count or len(self.args) > max_count:
             raise MPDError(self._mpd, MPDError.ACK_ERROR_ARG,
-                'wrong number of arguments for "{}"'.format(self._mpd.current_command))
+                u'wrong number of arguments for "{}"'.format(self._mpd.current_command))
 
 class Argument(unicode):
     def __new__(cls, escaped, mpd):
@@ -107,9 +107,9 @@ class Argument(unicode):
             elif len(split) == 2:
                 return range(self._int(split[0]), self._int(split[1]))
             else:
-                self._exception('need a range')
+                self._exception(u'need a range')
         except ValueError:
-            self._exception('need a number')
+            self._exception(u'need a number')
 
     def as_int(self, text):
         """
