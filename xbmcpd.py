@@ -227,7 +227,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self.command_list_started = False
             self.command_list_ok = False
         elif self.command_list_started:
-            self.command_list.append(line)
+            self.command_list.append(command)
         else:
             self.command_list = [command]
             self._process_command_list()
