@@ -88,10 +88,9 @@ class Command:
 
 class Argument(unicode):
     def __new__(cls, escaped, mpd):
-        return unicode.__new__(unicode, re.sub(ur'\\("|\\)', ur'\1', escaped))
-
-    def __init__(self, escaped, mpd):
+        self = unicode.__new__(cls, re.sub(ur'\\("|\\)', ur'\1', escaped))
         self._mpd = mpd
+        return self
 
     def _exception(self, text):
         raise MPDError(self._mpd, MPDError.ACK_ERROR_ARG, text)
@@ -111,12 +110,12 @@ class Argument(unicode):
         except ValueError:
             self._exception(u'need a number')
 
-    def as_int(self, text):
+    def as_int(self):
         """
         Convert text to int, or raise MPD error if this fails.
         """
         try:
-            return int(text)
+            return int(self)
         except ValueError:
             self._exception('need a number')
 
