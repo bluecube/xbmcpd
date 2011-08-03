@@ -144,6 +144,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         except MPDError as e:
             logging.error(error.text)
             self.sendLine(str(error))
+        except Exception as e:
+            logging.critical('Caught an exception!', exc_info=True)
+            self.sendLine(str(MPDError(
+                self, MPDError.ACK_ERROR_SYSTEM, 'Internal server error, sorry.')))
         else:
             logging.debug('OK')
             self.sendLine('OK')
