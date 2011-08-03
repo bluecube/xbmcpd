@@ -18,12 +18,64 @@
 
 import itertools
 import logging
+import re
 from twisted.internet import reactor, protocol
 from twisted.protocols import basic
 import xbmcnp
 import settings
 from pprint import pprint
 
+class MPDError(Exception):
+    ACK_ERROR_NOT_LIST = 1
+    ACK_ERROR_ARG = 2
+    ACK_ERROR_PASSWORD = 3
+    ACK_ERROR_PERMISSION = 4
+    ACK_ERROR_UNKNOWN = 5
+    ACK_ERROR_NO_EXIST = 50
+    ACK_ERROR_PLAYLIST_MAX = 51
+    ACK_ERROR_SYSTEM = 52
+    ACK_ERROR_PLAYLIST_LOAD = 53
+    ACK_ERROR_UPDATE_ALREADY = 54
+    ACK_ERROR_PLAYER_SYNC = 55
+    ACK_ERROR_EXIST = 56
+
+    def __init__(self, mpd, code, text):
+        self._code = code
+        self._position = mpd.command_list_position
+        self._command = mpd.current_command
+        self._text = text
+
+    def __str__(self):
+        return 'ACK [{}@{}] {{{}}} {}'.format(
+            self._code, self._position, self._command, self._text)
+
+
+class Command:
+    def __init__(self, text):
+        """
+        Split and unescape line of commands and arguments.
+        """
+        split = re.findall(r'"((?:[^\\]|\\"|\\\\)*)"|([^ \t]+)', text)
+        self._tuple = tuple((re.sub(r'\\("|\\)', r'\1', x[0] + x[1]) for x in split))
+
+        self._text = text
+        self._name = self._tuple[0].lower()
+
+    def __str__(self):
+        return self._text
+
+    def __iter__(self):
+        return iter(self._tuple)
+
+    def __getitem__(self, index):
+        return self._tuple[index]
+
+    def __len__(self):
+        return len(self._tuple)
+
+    def name(self):
+        return self._name
+    
 class MPD(basic.LineReceiver):
     """
     A MusicPlayerDaemon Server emulator.
@@ -31,38 +83,22 @@ class MPD(basic.LineReceiver):
 
     SLASHES = '\\/'
 
+    SUPPORTED_COMMANDS = {'status', 'currentsong', 'pause', 'play',
+        'next', 'previous', 'lsinfo', 'add',
+        'deleteid', 'plchanges', 'setvol',
+        'list', 'count', 'command_list_ok_begin',
+        'command_list_end', 'commands',
+        'notcommands', 'outputs', 'tagtypes',
+        'playid','stop','seek','plchangesposid'}
+
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
-        self.command_list = False
+        self.command_list = []
         self.command_list_ok = True
-        self.command_list_response = ''
+        self.command_list_started = False
         self.playlist_id = 1
         self.playlist_dict = {0 : []}
-        self.supported_commands = ['status', 'currentsong', 'pause', 'play',
-                                   'next', 'previous', 'lsinfo', 'add',
-                                   'deleteid', 'plchanges', 'setvol',
-                                   'list', 'count', 'command_list_ok_begin',
-                                   'command_list_end', 'commands',
-                                   'notcommands', 'outputs', 'tagtypes',
-                                   'playid','stop','seek','plchangesposid']
-        self.all_commands = ['add', 'addid', 'clear', 'clearerror', 'close',
-                            'commands', 'consume','count', 'crossfade',
-                            'currentsong', 'delete', 'deleteid',
-                            'disableoutput','enableoutput', 'find', 'idle',
-                            'kill', 'list', 'listall', 'listallinfo',
-                            'listplaylist', 'listplaylistinfo',
-                            'listplaylists', 'load', 'lsinfo', 'move','moveid',
-                            'next', 'notcommands', 'outputs', 'password',
-                            'pause', 'ping', 'play','playid', 'playlist',
-                            'playlistadd', 'playlistclear', 'playlistdelete',
-                            'playlistfind', 'playlistid', 'playlistinfo',
-                            'playlistmove', 'playlistsearch','plchanges',
-                            'plchangesposid', 'previous', 'random', 'rename',
-                            'repeat', 'rm','save', 'search', 'seek', 'seekid',
-                            'setvol', 'shuffle', 'single', 'stats', 'status',
-                            'stop', 'swap', 'swapid', 'tagtypes', 'update',
-                            'urlhandlers', 'volume']
         #self.plchanges(send=False)
         self.musicpath = settings.MUSICPATH.rstrip(self.SLASHES)
 
@@ -81,25 +117,36 @@ class MPD(basic.LineReceiver):
         """
         Pushes a list of information to the client.
         """
-        data = ""
-        for i in datalist:
-            data += "%s: %s\n" % (i[0], i[1])
-        self._send(data)
+        for pair in datalist:
+            self.sendLine("{}: {}".format(i[0], i[1]))
 
-    def _send(self, data=""):
-        """
-        Pushes a simple string to the client.
-        """
-        if self.command_list:
-            self.command_list_response += data
-            if self.command_list_ok:
-                self.command_list_response += "list_OK\n"
+    def _process_command_list(self):
+        try:
+            for i, command in enumerate(self.command_list):
+                logging.debug('command {} of {}: {}'.format(
+                    i, len(self.command_list), str(command)))
+
+                #for nice error messages:
+                self.command_list_position = i
+                self.current_command = command.name()
+
+                if command.name() not in self.SUPPORTED_COMMANDS:
+                    self.current_command = ''
+                    raise MPDError(self, MPDError.ACK_ERROR_UNKNOWN,
+                        '"unknown command "{}"'.format(command.name()))
+
+                #actually handle the command
+                getattr(self, command.name())(command)
+
+                if self.command_list_ok:
+                    self.sendLine('list_OK')
+        except MPDError as e:
+            logging.error(error.text)
+            self.sendLine(str(error))
         else:
-            data += "OK"
-            logging.debug("RESPONSE: " + data)
-            self.sendLine(data.encode('utf8'))
+            logging.debug('OK')
+            self.sendLine('OK')
 
-    
     def connectionMade(self):
         """
         Connection established.
@@ -109,107 +156,30 @@ class MPD(basic.LineReceiver):
     def lineReceived(self, data):
         """
         Receives data and takes the specified actions.
-
-        Returns 'UNSUPPORTED REQUEST' if invalid data is received.
         """
-	datacase = data
-	data = data.lower()
-        logging.debug('REQUEST: ' + datacase)
-        
-        if data == 'status':
-           #print 'sending status'
-            self.status()
-        elif data == 'currentsong':
-           #print 'sending current song'
-            self.currentsong()
-        elif data == 'next':
-            self.next()
-        elif data == 'previous':
-            self.previous()
-        elif data == "stop":
-            self.stop()
-        elif data == 'lsinfo':
-           #print 'sending directory info'
-            self.lsinfo()
-        elif data.startswith('add'):
-            self.add(data[5:-1])
-        elif data.startswith('deleteid'):
-            self.delete_id(data[10:-1])
-        elif data.startswith('delete'):
-            self.delete_id(data[8:-1])
-        elif data.startswith('lsinfo'):
-            self.lsinfo(datacase[8:-1])
-        elif data.startswith('plchangesposid'):
-            self.plchangesposid(int(data[16:-1]))
-        elif data.startswith('plchanges'):
-            self.plchanges(int(data[11:-1]))
-        elif data.startswith('playlistinfo'):
-	    arg = data[13:-1]
-	    if len(arg) > 0:
-		self.playlistinfo(int(arg))
-	    else:
-		self.playlistinfo()
-        elif data.startswith('playlistid'):
-            self.playlistinfo(int(data[12:-1]))
-        elif data.startswith('search "album"'):
-            #print "searching album..."
-            self.search_album(data[16:-1])
-        elif data.startswith('list album'):
-            self.list_album(data[12:-1])
-        elif data.startswith('setvol'):
-            self.set_vol(data[8:-1])
-        elif data == 'list "artist"' or data == "list artist":
-            self.list_artists()
-        elif data == 'list "genre"' or data == "list genre":
-            self.list_genres()
-        elif data.startswith('list "album" "artist"'):
-            self.list_album_artist(data[23:-1])
-        elif data == 'list "album"' or data == "list album":
-            self.list_albums()
-        elif data.startswith('list "date" "artist"'):
-            #artist, album = [x.replace("\"", "").strip() \
-            #                   for x in data[22:-2].split("\"album\"")]
-            #self.list_date_artist(artist, album)
-            self.list_album_date(data[41:-1])
-        elif data.startswith('list "date"') or data.startswith('list date'):
-            self.list_dates()
-        elif data.startswith('count "artist"'):
-            #print "sending artist stats"
-            if data != 'count "artist" "Untagged"' and data != 'count "artist" ""':
-                self.count_artist(data[16:-1])
-            else:
-                self._send_lists([['songs', 0],
-                                  ['playtime', 0]])
-        elif data == 'command_list_begin':
+
+        command = Command(data)
+
+        if command.name() == 'command_list_begin':
+            logging.debug('command list started')
+            self.command_list = []
+            self.command_list_started = True
             self.command_list_ok = False
-            self.command_list = True
-        elif data == 'command_list_ok_begin':
+        elif command.name() == 'command_list_ok_begin':
+            logging.debug('command list started')
+            self.command_list = []
+            self.command_list_started = True
             self.command_list_ok = True
-            self.command_list = True
-        elif data == 'command_list_end':
-            self.command_list = False
-            #print self.command_list_response
-            self._send(self.command_list_response)
-            self.command_list_response = ''
-        elif data == 'commands':
-            self.commands()
-        elif data == 'notcommands':
-            self.notcommands()
-        elif data == 'outputs':
-            self.outputs()
-        elif data == 'tagtypes':
-            self.tagtypes()
-        elif data == 'stats':
-            self.stats()
-        elif data.startswith('playid'):
-            self.playid(data[8:-1])
-        elif data.startswith("seek"):
-            seekto = data.replace('"', '').split(' ')           # TODO: replace with regex ?
-            self.seek(seekto[1],seekto[2])
-        elif data.startswith('pause') or data.startswith('play'):
-            self.playpause()
+        elif command.name() == 'command_list_end':
+            logging.debug('command list ended')
+            self._process_command_list()
+            self.command_list_started = False
+            self.command_list_ok = False
+        elif self.command_list_started:
+            self.command_list.append(line)
         else:
-            logging.error('UNSUPPORTED REQUEST:' + data)
+            self.command_list = [command]
+            self._process_command_list()
 
     def playlistinfo(self, pos=None):
         """
