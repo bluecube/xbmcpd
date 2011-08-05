@@ -181,7 +181,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 if command.name() not in self.SUPPORTED_COMMANDS:
                     self.current_command = ''
                     raise MPDError(self, MPDError.ACK_ERROR_UNKNOWN,
-                        u'"unknown command "{}"'.format(command.name()))
+                        u'unknown command "{}"'.format(command.name()))
 
                 #actually handle the command
                 getattr(self, command.name())(command)
