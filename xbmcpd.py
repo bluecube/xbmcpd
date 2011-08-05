@@ -211,7 +211,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Receives data and takes the specified actions.
         """
 
-        command = Command(data.decode('utf8'), self)
+        command = Command(data.rstrip('\r').decode(u'utf8'), self)
 
         if command.name() == u'command_list_begin':
             logging.debug(u'command list started')
