@@ -33,6 +33,14 @@ class XBMCControl(object):
         'track',
         'duration',
         'file']
+    
+    SONG_FIELDS = [
+        'title',
+        'artist',
+        'album',
+        'track',
+        'genre',
+        'year']
 
     SUPPORTED_VERSION = 3
 
@@ -42,8 +50,7 @@ class XBMCControl(object):
         self._check_version()
 
         #update the temporary data
-        self.list_artists()
-        self.list_albums()
+        self._build_all_dicts()
 
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
@@ -211,19 +218,26 @@ class XBMCControl(object):
         return self.call.AudioPlaylist.GetItems(
             fields=[], limits={'start':0, 'end':1})['limits']['total']
 
-    def list_artists(self):
-        """
-        Returns a list of all artists.
-        """
-        artists = self.call.AudioLibrary.GetArtists(fields=[])['artists']
-        self.artistdict = dict(((x['label'], x['artistid']) for x in artists))
-        return artists
+    def _build_all_dicts(self):
+        self.artistdict = self._build_dict(
+            self.call.AudioLibrary.GetArtists(fields=[])['artists'], 'artistid')
+        self.albumdict = self._build_dict(
+            self.call.AudioLibrary.GetAlbums(fields=[])['albums'], 'albumid')
+        self.genredict = self._build_dict(
+            self.call.AudioLibrary.GetGenres(fields=[])['genres'], 'genreid')
 
-    def list_genres(self):
+    def _build_dict(self, items, id_field):
+        ret = {}
+        for item in items:
+            ret.setdefault(item['label'], []).append(item[id_field])
+        return ret
+
+    def list_songs(self):
         """
-        Returns a list of all genres.
+        List of all songs
         """
-        return self.call.AudioLibrary.GetGenres()['genres']
+        songs = self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
+        return songs
 
     def count_artist(self, artist):
         """
@@ -271,44 +285,9 @@ class XBMCControl(object):
         """
         self.call.AudioPlaylist.Remove(pos)
     
-    def list_artist_albums(self, artist):
-        """
-        Get all albums by a specified artist.
-
-        Returns a list.
-        """
-        return self.call.AudioLibrary.GetAlbums(artistid=artistdict[artist])['albums']
-
-    def list_albums(self):
-        """
-        Get all albums inside the library.
-
-        Returns a list
-        """
-        albums = self.call.AudioLibrary.GetAlbums(fields=['year'])['albums']
-        self.albumdict = dict(((x['label'], x['albumid']) for x in albums))
-        self.dates = (x['year'] for x in albums if x['year'] != 0)
-        return albums
-
-    def list_album_date(self, album):
-        """
-        Get the date of the specified album.
-
-        Returns a string
-        """
-        return self.call.AudioLibrary.GetAlbumDetails(
-            albumid=self.albumdict[album], fields=['year'])['year']
-
     def add_to_playlist(self, path):
         """
         Add the given path to the playlist.
         """
         self.call.AudioPlaylist.Add({'file': path})
 
-    def list_dates(self):
-        """
-        Get a list of dates for which albums are available.
-
-        Returns a list.
-        """
-        return self.dates

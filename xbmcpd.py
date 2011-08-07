@@ -74,6 +74,13 @@ class Command:
         """
         return self._name
 
+    def arg_count_exception(self):
+        """
+        Prepare an exception complaining about number of arguments.
+        """
+        return MPDError(self._mpd, MPDError.ACK_ERROR_ARG,
+            u'wrong number of arguments for "{}"'.format(self._mpd.current_command))
+
     def check_arg_count(self, min_count, max_count = None):
         """
         Check that argument count is between min_count and max_count or
@@ -83,8 +90,7 @@ class Command:
             max_count = min_count
 
         if len(self.args) < min_count or len(self.args) > max_count:
-            raise MPDError(self._mpd, MPDError.ACK_ERROR_ARG,
-                u'wrong number of arguments for "{}"'.format(self._mpd.current_command))
+            raise self.arg_count_exception()
 
 class Argument(unicode):
     def __new__(cls, escaped, mpd):
@@ -127,7 +133,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     SLASHES = '\\/'
 
-    SUPPORTED_COMMANDS = {'status', 'currentsong', 'pause', 'play',
+    SUPPORTED_COMMANDS = {'status', 'stats', 'currentsong', 'pause', 'play',
         'next', 'previous', 'lsinfo', 'add',
         'deleteid', 'plchanges', 'setvol',
         'list', 'count', 'command_list_ok_begin',
@@ -135,7 +141,16 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'notcommands', 'outputs', 'tagtypes',
         'playid','stop','seek','plchangesposid'}
 
-    TAG_TYPES = ('Artist', 'Album', 'Title', 'Track', 'Name', 'Genre', 'Date')
+    # Tags that we support.
+    # MPD tag: XBMC tag
+    # MPD tags must be capitalized!
+    TAG_TYPES = {
+        'Artist': 'artist',
+        'Album': 'album',
+        'Title': 'title',
+        'Track': 'track',
+        'Genre': 'genre',
+        'Date': 'year'}
 
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
@@ -294,13 +309,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         stats = self.xbmc.get_library_stats()
         self._send_lists([[x, stats[x]] for x in stats.keys()])
 
-
     def tagtypes(self, command):
         """
         Sends a list of supported tagtypes.
         """
         command.check_arg_count(0)
-        self._send_lists((('tagtype', tag) for tag in self.TAG_TYPES))
+        self._send_lists(
+            (('tagtype', tag) for tag in self.TAG_TYPES.keys()))
 
     def commands(self, command):
         """
@@ -319,7 +334,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                     ['outputenabled', 1]]
         self._send_lists(templist)
 
-    def notcommands(self, commands):
+    def notcommands(self, command):
         command.check_arg_count(0)
         # don't talk about commands we don't support :-)
 
@@ -336,13 +351,14 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         self.xbmc.set_volume(volume)
 
-    def delete_id(self, song_id):
+    def deleteid(self, command):
         """
         Deletes a song by it's specified id.
         """
+        command.check_arg_count(1)
+        song_id = command.args[0].as_int()
         self.xbmc.remove_from_playlist(song_id)
         self.playlist_id += 1
-        self._send()
 
     def add(self, command):
         """
@@ -393,48 +409,55 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.xbmc.playid(song_id)
         self._send()
 
-    def playpause(self):
-        """
-        Toggle play or pause.
-        """
+    def play(self, command):
+        command.check_arg_count(0)
         self.xbmc.playpause()
-        self._send()
 
-    def list_dates(self):
-        """
-        Lists dates from all albums.
+    def pause(self, command):
+        command.check_arg_count(0)
+        self.xbmc.playpause()
 
-        Uses _send_lists() to push data to the client
+    def list(self, command):
         """
-        dates = self.xbmc.list_dates()
-        self._send_lists((('Date', x) for x in dates))
+        List command. Supports the undocumented extended syntax that GMPC seems to
+        use.
+        """
+        #TODO: Speed this up by specialcasing the simple filter cases (XBMC has some filtering).
 
-    def list_album_date(self, album):
-        """
-        Get the specified album's date.
+        if len(command.args) == 0:
+            raise command.arg_count_exception()
 
-        Uses _send_lists() to push data to the client
-        """
-        date = self.xbmc.list_album_date(album)
-        self._send_lists([['Date', date]])
+        tagtype = command.args[0].capitalize()
 
-    def list_albums(self):
-        """
-        Creates a list of all albums.
+        if (len(command.args) - 1) % 2 == 0:
+            filterdict = {tag.capitalize(): value for
+                tag, value in zip(command.args[1::2], command.args[2::2])}
+        elif len(command.args) == 2:
+            if tagtype == 'Album':
+                filterdict = {'Artist': command.args[1]}
+            else:
+                raise MPDError(self, MPDError.ACK_ERROR_ARG, 
+                    u'tag type must be "Album" for 2 argument version')
 
-        Uses _send_lists() to push data to the client
+        if tagtype in self.TAG_TYPES:
+            self._list_complex(filterdict, tagtype)
+        else:
+            raise MPDError(self, MPDError.ACK_ERROR_ARG,
+                u'"{}" is not known'.format(command.args[0]))
+    
+    def _list_complex(self, filterdict, tagtype):
         """
-        albums = self.xbmc.list_albums()
-        self._send_lists([('ALbum', x['label']) for x in albums])
+        Handle complex filtering for list command.
+        Downloads all songs and filters everything.
+        """
+        def predicate(song):
+            return all((song[self.TAG_TYPES[rule]] == filterdict[rule] for
+                rule in filterdict))
+        
+        tags = set((song[self.TAG_TYPES[tagtype]] for
+            song in self.xbmc.list_songs() if predicate(song)))
 
-    def list_album_artist(self, artist):
-        """
-        Create a list of all albums from the specified artist.
-
-        Uses _send_lists() to push data to the client
-        """
-        albums = self.xbmc.list_artist_albums(artist)
-        self._send_lists([('ALbum', x['label']) for x in albums])
+        self._send_lists([(tagtype, tag) for tag in tags])
 
     def count_artist(self, artist):
         """
@@ -446,30 +469,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self._send_lists([['songs', count[0]],
                           ['playtime', count[1]]])
 
-    def list_artists(self):
-        """
-        Fetches a list of all artists.
-
-        Uses _send_lists() to push data to the client
-        """
-        artists = self.xbmc.list_artists()
-        self._send_lists([('Artist', x['label']) for x in artists])
-
-    def list_genres(self):
-        """
-        Fetches a list of all genres.
-
-        Uses _send_lists() to push data to the client
-        """
-        genres = self.xbmc.list_artists()
-        self._send_lists([('Genre', x['label']) for x in genres])
-
     def plchanges(self, old_playlist_id=0, send=True):
         """
         Returns a list of playlist changes.
 
         Uses _send_lists() to push data to the client
         """
+        #TODO: Implement this!
         #set(L1) ^ set(L2)
         playlist = self.xbmc.get_current_playlist()
         playlistlist = []
