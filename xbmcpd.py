@@ -144,7 +144,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     # Tags that we support.
     # MPD tag -> XBMC tag
     # MPD tags must be capitalized!
-    TAG_TYPES = {
+    MPD_TAG_TO_XBMC_TAG = {
         'Artist': 'artist',
         'Album': 'album',
         'Title': 'title',
@@ -152,7 +152,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'Genre': 'genre',
         'Date': 'year'}
 
-    INV_TAG_TYPES = {v:k for k, v in TAG_TYPES.items()}
+    XBMC_TAG_TO_MPD_TAG = {v:k for k, v in MPD_TAG_TO_XBMC_TAG.items()}
 
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
@@ -191,8 +191,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         lines = [('file', self._xbmc_path_to_mpd_path(song['file']))]
         for xbmctag, value in song.items():
-            if xbmctag in self.INV_TAG_TYPES:
-                lines.append((self.INV_TAG_TYPES[xbmctag], value))
+            if xbmctag in self.XBMC_TAG_TO_MPD_TAG:
+                lines.append((self.XBMC_TAG_TO_MPD_TAG[xbmctag], value))
             
         self._send_lists(lines)
 
@@ -328,7 +328,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         command.check_arg_count(0)
         self._send_lists(
-            (('tagtype', tag) for tag in self.TAG_TYPES.keys()))
+            (('tagtype', tag) for tag in self.MPD_TAG_TO_XBMC_TAG.keys()))
 
     def commands(self, command):
         """
@@ -452,7 +452,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         else:
             filterdict, predicate = self._make_filter(command.args[1:])
 
-        if tagtype in self.TAG_TYPES:
+        if tagtype in self.MPD_TAG_TO_XBMC_TAG:
             self._list_complex(predicate, tagtype)
         else:
             raise MPDError(self, MPDError.ACK_ERROR_ARG,
@@ -470,7 +470,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         filterdict = {}
         for tag, value in zip(arguments[0::2], arguments[1::2]):
             tag = tag.capitalize()
-            if tag != 'Any' and tag != 'File' and tag not in self.TAG_TYPES:
+            if tag != 'Any' and tag != 'File' and tag not in self.MPD_TAG_TO_XBMC_TAG:
                 raise MPDError(self, MPDError.ACK_ERROR_ARG,
                     u'tag type "{}" unrecognized'.format(tag))
             filterdict[tag] = value
@@ -482,11 +482,11 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                     match &= (self._mpd_path_to_xbmc_path(value) == song['file'])
                 elif rule == 'any':
                     tmpmatch = False
-                    for xbmctag in self.TAG_TYPES.values():
+                    for xbmctag in self.MPD_TAG_TO_XBMC_TAG.values():
                         tmpmatch |= (value == song[xbmctag])
                     match &= tmpmatch
                 else:
-                    match &= (value == song[self.TAG_TYPES[rule]])
+                    match &= (value == song[self.MPD_TAG_TO_XBMC_TAG[rule]])
 
             return match
 
@@ -497,7 +497,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Handle complex filtering for list command.
         Downloads all songs and filters everything using the givent predicate.
         """
-        tags = set((song[self.TAG_TYPES[tagtype]] for
+        tags = set((song[self.MPD_TAG_TO_XBMC_TAG[tagtype]] for
             song in self.xbmc.list_songs() if predicate(song)))
 
         self._send_lists([(tagtype, tag) for tag in tags])
