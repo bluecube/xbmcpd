@@ -292,3 +292,8 @@ class XBMCControl(object):
         """
         self.call.AudioPlaylist.Add({'file': path})
 
+    def clear(self):
+        """
+        Clear the current playlist
+        """
+        self.call.AudioPlaylist.Clear()

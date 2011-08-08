@@ -135,7 +135,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     SUPPORTED_COMMANDS = {'status', 'stats', 'currentsong', 'pause', 'play',
         'next', 'previous', 'lsinfo', 'add', 'find',
-        'deleteid', 'plchanges', 'setvol',
+        'deleteid', 'plchanges', 'setvol', 'clear',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands',
         'notcommands', 'outputs', 'tagtypes',
@@ -383,6 +383,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.xbmc.add_to_playlist(self._mpd_path_to_xbmc_path(path))
         self.playlist_id += 1
 
+    def clear(self, command):
+        command.check_arg_count(0)
+        self.xbmc.clear()
+
     def next(self, command):
         """
         Skip to the next song in the playlist.
@@ -410,17 +414,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         command.check_arg_count(2)
 
-        self.xbmc.playid(song_id)
-        self.xbmc.seekto(seconds)
+        self.xbmc.playid(command.args[0].as_int())
+        self.xbmc.seekto(command.args[1].as_int())
 
-        self._send()
-
-    def playid(self, song_id):
+    def playid(self, command):
         """
         Get a song by it's id and play it.
         """
-        self.xbmc.playid(song_id)
-        self._send()
+        command.check_arg_count(1)
+        self.xbmc.playid(command.args[0].as_int())
 
     def play(self, command):
         command.check_arg_count(0)
