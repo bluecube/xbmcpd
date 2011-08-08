@@ -35,6 +35,7 @@ class XBMCControl(object):
         'file']
     
     SONG_FIELDS = [
+        'file',
         'title',
         'artist',
         'album',

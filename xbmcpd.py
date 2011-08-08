@@ -134,7 +134,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     SLASHES = '\\/'
 
     SUPPORTED_COMMANDS = {'status', 'stats', 'currentsong', 'pause', 'play',
-        'next', 'previous', 'lsinfo', 'add',
+        'next', 'previous', 'lsinfo', 'add', 'find',
         'deleteid', 'plchanges', 'setvol',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands',
@@ -142,7 +142,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'playid','stop','seek','plchangesposid'}
 
     # Tags that we support.
-    # MPD tag: XBMC tag
+    # MPD tag -> XBMC tag
     # MPD tags must be capitalized!
     TAG_TYPES = {
         'Artist': 'artist',
@@ -151,6 +151,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'Track': 'track',
         'Genre': 'genre',
         'Date': 'year'}
+
+    INV_TAG_TYPES = {v:k for k, v in TAG_TYPES.items()}
 
     def __init__(self):
         self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
@@ -182,6 +184,17 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         for pair in datalist:
             self._send_line(u"{}: {}".format(pair[0], pair[1]))
+
+    def _send_song(self, song):
+        """
+        Sends a single song and its metadata from an XBMC song object.
+        """
+        lines = [('file', self._xbmc_path_to_mpd_path(song['file']))]
+        for xbmctag, value in song.items():
+            if xbmctag in self.INV_TAG_TYPES:
+                lines.append((self.INV_TAG_TYPES[xbmctag], value))
+            
+        self._send_lists(lines)
 
     def _process_command_list(self):
         try:
@@ -419,45 +432,98 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     def list(self, command):
         """
-        List command. Supports the undocumented extended syntax that GMPC seems to
-        use.
+        List command.
         """
-        #TODO: Speed this up by specialcasing the simple filter cases (XBMC has some filtering).
+        # list genre album "Café del Mar, volumen seis" artist "A New Funky Generation"
+        #TODO: Speed this up by specialcasing the simple filters (XBMC has some filtering).
 
         if len(command.args) == 0:
             raise command.arg_count_exception()
 
         tagtype = command.args[0].capitalize()
 
-        if (len(command.args) - 1) % 2 == 0:
-            filterdict = {tag.capitalize(): value for
-                tag, value in zip(command.args[1::2], command.args[2::2])}
-        elif len(command.args) == 2:
+        if len(command.args) == 2:
             if tagtype == 'Album':
-                filterdict = {'Artist': command.args[1]}
+                filterdict, predicate = \
+                    self._make_filter(['Album', command.args[1]])
             else:
                 raise MPDError(self, MPDError.ACK_ERROR_ARG, 
                     u'tag type must be "Album" for 2 argument version')
+        else:
+            filterdict, predicate = self._make_filter(command.args[1:])
 
         if tagtype in self.TAG_TYPES:
-            self._list_complex(filterdict, tagtype)
+            self._list_complex(predicate, tagtype)
         else:
             raise MPDError(self, MPDError.ACK_ERROR_ARG,
                 u'"{}" is not known'.format(command.args[0]))
     
-    def _list_complex(self, filterdict, tagtype):
+    def _make_filter(self, arguments):
+        """
+        Returns a tuple containing filter dictionary and filtering predicate
+        used for "list" and "find" commands.
+        """
+        if len(arguments) % 2 != 0:
+            raise MPDError(self, MPDError.ACK_ERROR_ARG,
+                u'not able to parse args')
+
+        filterdict = {}
+        for tag, value in zip(arguments[0::2], arguments[1::2]):
+            tag = tag.capitalize()
+            if tag != 'Any' and tag != 'File' and tag not in self.TAG_TYPES:
+                raise MPDError(self, MPDError.ACK_ERROR_ARG,
+                    u'tag type "{}" unrecognized'.format(tag))
+            filterdict[tag] = value
+
+        def predicate(song):
+            match = True
+            for rule, value in filterdict.items():
+                if rule == 'file':
+                    match &= (self._mpd_path_to_xbmc_path(value) == song['file'])
+                elif rule == 'any':
+                    tmpmatch = False
+                    for xbmctag in self.TAG_TYPES.values():
+                        tmpmatch |= (value == song[xbmctag])
+                    match &= tmpmatch
+                else:
+                    match &= (value == song[self.TAG_TYPES[rule]])
+
+            return match
+
+        return filterdict, predicate
+
+    def _list_complex(self, predicate, tagtype):
         """
         Handle complex filtering for list command.
-        Downloads all songs and filters everything.
+        Downloads all songs and filters everything using the givent predicate.
         """
-        def predicate(song):
-            return all((song[self.TAG_TYPES[rule]] == filterdict[rule] for
-                rule in filterdict))
-        
         tags = set((song[self.TAG_TYPES[tagtype]] for
             song in self.xbmc.list_songs() if predicate(song)))
 
         self._send_lists([(tagtype, tag) for tag in tags])
+
+    def find(self, command):
+        """
+        List command.
+        """
+        # find album "Café del Mar, volumen seis" artist "A New Funky Generation"
+        #TODO: Speed this up by specialcasing the simple filters (XBMC has some filtering).
+
+        if len(command.args) < 2:
+            raise command.arg_count_exception()
+
+        filterdict, predicate = self._make_filter(command.args)
+
+        self._find_complex(predicate)
+
+    def _find_complex(self, predicate):
+        """
+        Handle complex filtering for find command.
+        Downloads all songs and filters everything using the givent predicate.
+        """
+        for song in self.xbmc.list_songs():
+            if predicate(song):
+                self._send_song(song)
 
     def count_artist(self, artist):
         """
