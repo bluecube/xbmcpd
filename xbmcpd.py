@@ -137,7 +137,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'next', 'previous', 'lsinfo', 'add', 'find',
         'deleteid', 'plchanges', 'setvol', 'clear',
         'list', 'count', 'command_list_ok_begin',
-        'command_list_end', 'commands',
+        'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
         'playid','stop','seek','plchangesposid'}
 
@@ -665,6 +665,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
 
         self._send_lists(itertools.chain(dirlist, filelist, pllist))
+
+    def close(self, command):
+        command.check_arg_count(0)
+        self.transport.loseConnection()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
