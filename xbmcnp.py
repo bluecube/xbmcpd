@@ -109,40 +109,6 @@ class XBMCControl(object):
 
         try:
             state = self.call.AudioPlaylist.State()
-
-            if state["repeat"] == "all":
-                ret["repeat"] = 1
-                ret["single"] = 0
-            elif state["repeat"] == "one":
-                ret["repeat"] = 1
-                ret["single"] = 1
-            else:
-                ret["repeat"] = 0
-
-            if state["shuffled"]:
-                ret["random"] = 1
-            else:
-                ret["random"] = 0
-
-
-            assert state["playing"]
-            if state["paused"]:
-                ret["state"] = "paused"
-
-            labels = self.call.System.GetInfoLabels([
-                'MusicPlayer.BitRate',
-                'MusicPlayer.SampleRate',
-                'MusicPlayer.Time',
-                'MusicPlayer.PlaylistPosition'])
-            
-            pprint(labels)
-            minutes, seconds = labels['MusicPlayer.Time'].split(':')
-            ret["time"] = 60 * int(minutes) + int(seconds)
-
-            ret["bitrate"] = labels['MusicPlayer.BitRate']
-            ret["audio"] = labels["MusicPlayer.SampleRate"] + ":24:2"
-            ret["song"] = labels["MusicPlayer.PlaylistPosition"]
-
         except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
@@ -151,6 +117,42 @@ class XBMCControl(object):
             ret["repeat"] = 0
             ret["random"] = 0
             ret["state"] = "stop"
+
+            return ret
+
+        if state["repeat"] == "all":
+            ret["repeat"] = 1
+            ret["single"] = 0
+        elif state["repeat"] == "one":
+            ret["repeat"] = 1
+            ret["single"] = 1
+        else:
+            ret["repeat"] = 0
+
+        if state["shuffled"]:
+            ret["random"] = 1
+        else:
+            ret["random"] = 0
+        
+        if state["paused"]:
+            ret["state"] = "paused"
+        elif not state["playing"]:
+            ret["state"] = "stop"
+            return ret
+            
+
+        labels = self.call.System.GetInfoLabels([
+            'MusicPlayer.BitRate',
+            'MusicPlayer.SampleRate',
+            'MusicPlayer.Time',
+            'MusicPlayer.PlaylistPosition'])
+
+        minutes, seconds = labels['MusicPlayer.Time'].split(':')
+        ret["time"] = 60 * int(minutes) + int(seconds)
+
+        ret["bitrate"] = labels['MusicPlayer.BitRate']
+        ret["audio"] = labels["MusicPlayer.SampleRate"] + ":24:2"
+        ret["song"] = labels["MusicPlayer.PlaylistPosition"]
 
         return ret
         
