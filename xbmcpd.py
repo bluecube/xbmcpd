@@ -56,7 +56,7 @@ class Command:
         """
         Split and unescape line of commands and arguments.
         """
-        split = re.findall(ur'"((?:[^\\]|\\"|\\\\)*)"|([^ \t]+)', text)
+        split = re.findall(ur'"((?:[^\\]|\\"|\\\\)*?)"|([^ \t]+)', text)
         split = tuple((Argument(x[0] + x[1], mpd) for x in split))
 
         self._text = text
