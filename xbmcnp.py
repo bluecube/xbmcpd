@@ -137,10 +137,11 @@ class XBMCControl(object):
         
         if state["paused"]:
             ret["state"] = "paused"
-        elif not state["playing"]:
+        elif state["playing"]:
+            ret["state"] = "play"
+        else:
             ret["state"] = "stop"
             return ret
-            
 
         labels = self.call.System.GetInfoLabels([
             'MusicPlayer.BitRate',
