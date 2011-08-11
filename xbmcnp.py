@@ -41,7 +41,8 @@ class XBMCControl(object):
         'album',
         'track',
         'genre',
-        'year']
+        'year',
+        'duration']
 
     SUPPORTED_VERSION = 3
 

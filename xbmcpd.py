@@ -150,7 +150,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'Title': 'title',
         'Track': 'track',
         'Genre': 'genre',
-        'Date': 'year'}
+        'Date': 'year',
+        'Time': 'duration'}
 
     XBMC_TAG_TO_MPD_TAG = {v:k for k, v in MPD_TAG_TO_XBMC_TAG.items()}
 
