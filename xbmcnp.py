@@ -293,7 +293,18 @@ class XBMCControl(object):
         """
         Add the given path to the playlist.
         """
-        self.call.AudioPlaylist.Add({'file': path})
+        # TODO: This is a little hack ...
+        # XBMC wants to know if the item added is a file or a directory
+        # so we try to add the item as a file and if this fails try adding
+        # it as a directory
+        try:
+            self.call.AudioPlaylist.Add({'file': path})
+            return
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32602:
+                raise
+
+        self.call.AudioPlaylist.Add({'directory': path})
 
     def clear(self):
         """
