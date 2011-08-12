@@ -672,7 +672,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.transport.loseConnection()
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
+    logging.basicConfig(level=logging.INFO, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
 
     factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD
