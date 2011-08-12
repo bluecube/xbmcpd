@@ -147,10 +147,14 @@ class XBMCControl(object):
             'MusicPlayer.BitRate',
             'MusicPlayer.SampleRate',
             'MusicPlayer.Time',
+            'MusicPlayer.Duration',
             'MusicPlayer.PlaylistPosition'])
 
         minutes, seconds = labels['MusicPlayer.Time'].split(':')
-        ret["time"] = 60 * int(minutes) + int(seconds)
+        time = 60 * int(minutes) + int(seconds)
+        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
+        duration = 60 * int(minutes) + int(seconds)
+        ret["time"] = "{}:{}".format(time, duration)
 
         ret["bitrate"] = labels['MusicPlayer.BitRate']
         ret["audio"] = labels["MusicPlayer.SampleRate"] + ":24:2"
