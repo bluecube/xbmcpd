@@ -103,16 +103,21 @@ class Argument(unicode):
 
     def as_range(self):
         """
-        Convert mpd range from string to a python range object.
+        Convert mpd range from string to a dictionary suitable as limits field
+        for xbmc.
         """
         try:
             split = self.split(':')
             if len(split) == 1:
-                return [self._parse_int(text)]
+                start = int(self)
+                end = start + 1
             elif len(split) == 2:
-                return range(self._int(split[0]), self._int(split[1]))
+                start = int(split[0])
+                end = int(split[1])
             else:
                 self._exception(u'need a range')
+
+            return {'start': start, 'end': end}
         except ValueError:
             self._exception(u'need a number')
 
@@ -139,7 +144,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
-        'playid','stop','seek','plchangesposid'}
+        'playid','stop','seek','plchangesposid', 'playlistinfo', 'playlistid'}
 
     # Tags that we support.
     # MPD tag -> XBMC tag
@@ -186,7 +191,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         for pair in datalist:
             self._send_line(u"{}: {}".format(pair[0], pair[1]))
 
-    def _send_song(self, song):
+    def _send_song(self, song, pos = None, ident = None):
         """
         Sends a single song and its metadata from an XBMC song object.
         """
@@ -194,6 +199,12 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         for xbmctag, value in song.items():
             if xbmctag in self.XBMC_TAG_TO_MPD_TAG:
                 lines.append((self.XBMC_TAG_TO_MPD_TAG[xbmctag], value))
+
+        if pos != None:
+            lines.append(('Pos', pos))
+
+        if ident != None:
+            lines.append(('Id', ident))
             
         self._send_lists(lines)
 
@@ -269,34 +280,16 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         playlist_length = self.xbmc.get_playlist_length()
 
         if len(command.args) == 1:
-            items = command.args[0].as_range()
+            limits = command.args[0].as_range()
         else:
-            items = range(playlist_length)
+            limits = {'start': 0, 'end': -1}
 
-        try:
-            playlist = self.playlist_dict[self.playlist_id]
-        except:
-            self.plchanges(send=False)
-            playlist = self.playlist_dict[self.playlist_id]
-        #ugly hack ahead!
-        seperated_playlist = []
-        counter = 0
-        templist = []
-        for i in playlist:
-            templist.append(i)
-            counter += 1
-            if counter == 10:
-                seperated_playlist.append(templist)
-                templist = []
-                counter = 0
-	if pos is not None:
-	    self._send_lists(seperated_playlist[pos])
-	else:
-	    flattened_list = []
-	    for song in seperated_playlist:
-		for prop in song:
-		    flattened_list.append(prop)
-	    self._send_lists(flattened_list)
+        for pos, song in enumerate(self.xbmc.get_current_playlist(limits)):
+            self._send_song(song, pos, pos)
+
+    def playlistid(self, command):
+        self.playlistinfo(command)
+        #TODO: Is this all right?
 
     def status(self, command):
         """

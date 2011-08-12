@@ -184,13 +184,13 @@ class XBMCControl(object):
     def list_playlists(self):
         return [] #TODO: Implement this when jsonrpc api supports listing playlists.
 
-    def get_current_playlist(self):
+    def get_current_playlist(self, limits):
         """
         Get the music playlist contents.
 
         Returns a list filled by each file's tags
         """
-        return self.call.AudioPlaylist.GetItems(fields=self.ALL_FIELDS)['items']
+        return self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS, limits=limits)['items']
 
     def next(self):
         """
