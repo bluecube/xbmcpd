@@ -137,7 +137,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     """
 
     SUPPORTED_COMMANDS = {'status', 'stats', 'pause', 'play',
-        'next', 'previous', 'lsinfo', 'add', 'find',
+        'next', 'previous', 'lsinfo', 'add', 'find', 'search',
         'deleteid', 'setvol', 'clear',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
@@ -481,21 +481,27 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def _filtered_songs(self, filterdict):
 
         def predicate(song):
-            match = True
-            for rule, value in filterdict.items():
-                if rule == 'file':
-                    match &= (self._mpd_path_to_xbmc_path(value) == song['file'])
-                elif rule == 'any':
-                    tmpmatch = False
-                    for xbmctag in self.MPD_TAG_TO_XBMC_TAG.values():
-                        tmpmatch |= (value == song[xbmctag])
-                    match &= tmpmatch
-                else:
-                    match &= (value == song[self.MPD_TAG_TO_XBMC_TAG[rule]])
-
-            return match
+            return self._filter_predicate(filterdict, lambda a, b: a == b, song)
 
         return itertools.ifilter(predicate, self.xbmc.list_songs())
+
+    def _filter_predicate(self, filterdict, compare, song):
+        """
+        Should the given song be selected based on the filterdict and compare function?
+        """
+        match = True
+        for rule, value in filterdict.items():
+            if rule == 'file':
+                match &= (compare(value, self._xbmc_path_to_mpd_path(song['file'])))
+            elif rule == 'any':
+                tmpmatch = False
+                for xbmctag in self.MPD_TAG_TO_XBMC_TAG.values():
+                    tmpmatch |= (compare(value, song[xbmctag]))
+                match &= tmpmatch
+            else:
+                match &= (compare(value, song[self.MPD_TAG_TO_XBMC_TAG[rule]]))
+
+        return match
 
     def find(self, command):
         """
@@ -509,7 +515,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         filterdict = self._make_filter(command.args)
 
         for song in self._filtered_songs(filterdict):
-            self._send_song(song)
+                self._send_song(song)
 
     def count(self, command):
         """
@@ -532,6 +538,24 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self._send_lists([
             ('songs', count),
             ('playtime', playtime)])
+
+    def search(self, command):
+        """
+        Search command.
+        """
+        # like find, but case insensitive and uses substring instead of equality
+
+        if len(command.args) < 2:
+            raise command.arg_count_exception()
+
+        filterdict = self._make_filter(command.args)
+
+        def predicate(song):
+            return self._filter_predicate(filterdict, lambda a, b: a.lower() in b.lower(), song)
+
+        for song in self.xbmc.list_songs():
+            if predicate(song):
+                self._send_song(song)
 
     def currentsong(self, command):
         """
