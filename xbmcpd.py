@@ -161,7 +161,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     XBMC_TAG_TO_MPD_TAG = {v:k for k, v in MPD_TAG_TO_XBMC_TAG.items()}
 
     def __init__(self):
-        self.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL)
         self.delimiter = '\n'
         self.command_list = []
         self.command_list_ok = False
@@ -667,7 +666,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
 
+    logging.debug('downloading XBMC data')
+    MPD.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL) #only to update the static info before the first request.
+
     factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD
     twisted.internet.reactor.listenTCP(settings.MPD_PORT, factory)
+
+    logging.info('starting MPD server at port {}'.format(settings.MPD_PORT))
+
     twisted.internet.reactor.run()

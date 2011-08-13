@@ -52,8 +52,8 @@ class XBMCControl(object):
         self._check_version()
 
         #update the temporary data
-        self._build_all_dicts()
-
+        self._refresh_temp_data()
+        
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
         if jsonrpc_version != self.SUPPORTED_VERSION:
@@ -227,13 +227,15 @@ class XBMCControl(object):
         return self.call.AudioPlaylist.GetItems(
             fields=[], limits={'start':0, 'end':1})['limits']['total']
 
-    def _build_all_dicts(self):
+    def _refresh_temp_data(self):
         self.artistdict = self._build_dict(
             self.call.AudioLibrary.GetArtists(fields=[])['artists'], 'artistid')
         self.albumdict = self._build_dict(
             self.call.AudioLibrary.GetAlbums(fields=[])['albums'], 'albumid')
         self.genredict = self._build_dict(
             self.call.AudioLibrary.GetGenres(fields=[])['genres'], 'genreid')
+
+        self._all_songs = self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
 
     def _build_dict(self, items, id_field):
         ret = {}
@@ -245,8 +247,7 @@ class XBMCControl(object):
         """
         List of all songs
         """
-        songs = self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
-        return songs
+        return self._all_songs
 
     def count_artist(self, artist):
         """
