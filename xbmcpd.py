@@ -136,8 +136,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     A MusicPlayerDaemon Server emulator.
     """
 
-    SLASHES = '\\/'
-
     SUPPORTED_COMMANDS = {'status', 'stats', 'pause', 'play',
         'next', 'previous', 'lsinfo', 'add', 'find',
         'deleteid', 'setvol', 'clear',
@@ -170,18 +168,33 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.playlist_id = 1
         self.playlist_dict = {0 : []}
         #self.plchanges(send=False)
-        self.musicpath = settings.MUSICPATH.rstrip(self.SLASHES)
 
     def _xbmc_path_to_mpd_path(self, path):
         """
         Converts a path that xbmc uses (based at filesystem root)
         to path format for mpd (relative to music path).
         """
-        assert path.startswith(self.musicpath)
-        return path[len(self.musicpath):].strip(self.SLASHES)
+        musicpath = settings.MUSICPATH.rstrip(settings.XBMC_PATH_SEP)
+
+        assert path.startswith(musicpath)
+
+        path = path[len(musicpath):]
+        path = path.strip(settings.XBMC_PATH_SEP)
+        path = path.replace(settings.XBMC_PATH_SEP, '/')
+
+        return path
 
     def _mpd_path_to_xbmc_path(self, path):
-        return self.musicpath + '/' + path.lstrip(self.SLASHES)
+        """
+        Converts a path suitable for MPD to path for XBMC
+        Almost inverse for _xbmc_path_to_mpd_path()
+        """
+
+        musicpath = settings.MUSICPATH.rstrip(settings.XBMC_PATH_SEP)
+
+        path = path.replace('/', settings.XBMC_PATH_SEP)
+        path = musicpath + settings.XBMC_PATH_SEP + path
+        return path
 
     def _send_lists(self, datalist):
         """
@@ -545,7 +558,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if status == None:
             return
 
-        self._send_lists([['file', status['Player.Filenameandpath'].replace(self.musicpath, '')],
+        self._send_lists([
+            ['file', self._xbmc_path_to_mpd_path(status['Player.Filenameandpath'])],
             ['Time', status['duration']],
             ['Artist', status['MusicPlayer.Artist']],
             ['Title', status['MusicPlayer.Title']],
@@ -573,26 +587,22 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         for f in self.xbmc.get_directory(self._mpd_path_to_xbmc_path(path)):
             filepath = self._xbmc_path_to_mpd_path(f['file'])
             if f['filetype'] == 'directory':
-                if f['file'].endswith(tuple(self.SLASHES)):
+                if f['file'].endswith(settings.XBMC_PATH_SEP):
                     dirlist.append(['directory', filepath])
                 else:
                     pllist.append(['playlist', filepath])
             else:
-                filelist.append(['file', filepath])
-                filelist.append(['Time', f['duration']])
-                filelist.append(['Artist', f['artist']])
-                filelist.append(['Title', f['title']])
-                filelist.append(['Album', f['album']])
-                filelist.append(['Track', f['track']])
-                filelist.append(['Date', f['year']])
-                filelist.append(['Genre', f['genre']])
+                filelist.append(f)
 
-        if path.lstrip(self.SLASHES) == '':
+        if path.strip('/') == '':
             for pl in self.xbmc.list_playlists():
                 pllist.append(['playlist', pl['label']])
 
 
-        self._send_lists(itertools.chain(dirlist, filelist, pllist))
+        self._send_lists(dirlist)
+        for f in filelist:
+            self._send_song(f)
+        self._send_lists(pllist)
 
     def close(self, command):
         command.check_arg_count(0)
