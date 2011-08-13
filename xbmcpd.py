@@ -429,25 +429,27 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         tagtype = command.args[0].capitalize()
 
+        if tagtype not in self.MPD_TAG_TO_XBMC_TAG:
+            raise MPDError(self, MPDError.ACK_ERROR_ARG,
+                u'"{}" is not known'.format(command.args[0]))
+            
         if len(command.args) == 2:
             if tagtype == 'Album':
-                filterdict, predicate = \
-                    self._make_filter(['Album', command.args[1]])
+                filterdict = {'Album': command.args[1]}
             else:
                 raise MPDError(self, MPDError.ACK_ERROR_ARG, 
                     u'tag type must be "Album" for 2 argument version')
         else:
-            filterdict, predicate = self._make_filter(command.args[1:])
+            filterdict = self._make_filter(command.args[1:])
 
-        if tagtype in self.MPD_TAG_TO_XBMC_TAG:
-            self._list_complex(predicate, tagtype)
-        else:
-            raise MPDError(self, MPDError.ACK_ERROR_ARG,
-                u'"{}" is not known'.format(command.args[0]))
+        tags = set((song[self.MPD_TAG_TO_XBMC_TAG[tagtype]] for
+            song in self._filtered_songs(filterdict)))
+
+        self._send_lists([(tagtype, tag) for tag in tags])
     
     def _make_filter(self, arguments):
         """
-        Returns a tuple containing filter dictionary and filtering predicate
+        Returns a tuple containing filter dictionary
         used for "list" and "find" commands.
         """
         if len(arguments) % 2 != 0:
@@ -461,6 +463,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 raise MPDError(self, MPDError.ACK_ERROR_ARG,
                     u'tag type "{}" unrecognized'.format(tag))
             filterdict[tag] = value
+
+        return filterdict
+
+    def _filtered_songs(self, filterdict):
 
         def predicate(song):
             match = True
@@ -477,21 +483,11 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
             return match
 
-        return filterdict, predicate
-
-    def _list_complex(self, predicate, tagtype):
-        """
-        Handle complex filtering for list command.
-        Downloads all songs and filters everything using the givent predicate.
-        """
-        tags = set((song[self.MPD_TAG_TO_XBMC_TAG[tagtype]] for
-            song in self.xbmc.list_songs() if predicate(song)))
-
-        self._send_lists([(tagtype, tag) for tag in tags])
+        return itertools.ifilter(predicate, self.xbmc.list_songs())
 
     def find(self, command):
         """
-        List command.
+        Find command.
         """
         # find album "Café del Mar, volumen seis" artist "A New Funky Generation"
         #TODO: Speed this up by specialcasing the simple filters (XBMC has some filtering).
@@ -499,18 +495,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if len(command.args) < 2:
             raise command.arg_count_exception()
 
-        filterdict, predicate = self._make_filter(command.args)
+        filterdict = self._make_filter(command.args)
 
-        self._find_complex(predicate)
-
-    def _find_complex(self, predicate):
-        """
-        Handle complex filtering for find command.
-        Downloads all songs and filters everything using the givent predicate.
-        """
-        for song in self.xbmc.list_songs():
-            if predicate(song):
-                self._send_song(song)
+        for song in self._filtered_songs(filterdict):
+            self._send_song(song)
 
     def currentsong(self, command):
         """
