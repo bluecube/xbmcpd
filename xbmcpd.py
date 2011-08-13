@@ -138,13 +138,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     SLASHES = '\\/'
 
-    SUPPORTED_COMMANDS = {'status', 'stats', 'currentsong', 'pause', 'play',
+    SUPPORTED_COMMANDS = {'status', 'stats', 'pause', 'play',
         'next', 'previous', 'lsinfo', 'add', 'find',
-        'deleteid', 'plchanges', 'setvol', 'clear',
+        'deleteid', 'setvol', 'clear',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
-        'playid','stop','seek','plchangesposid', 'playlistinfo', 'playlistid'}
+        'playid','stop','seek', 'playlistinfo', 'playlistid'}
 
     # Tags that we support.
     # MPD tag -> XBMC tag
@@ -311,6 +311,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         Uses _send_lists() to push data to the client
         """
+        #TODO: check this.
         command.check_arg_count(0)
         stats = self.xbmc.get_library_stats()
         self._send_lists([[x, stats[x]] for x in stats.keys()])
@@ -381,23 +382,14 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.xbmc.clear()
 
     def next(self, command):
-        """
-        Skip to the next song in the playlist.
-        """
         command.check_arg_count(0)
         self.xbmc.next()
 
     def previous(self, command):
-        """
-        Return to the previous song in the playlist.
-        """
         command.check_arg_count(0)
         self.xbmc.prev()
 
     def stop(self, command):
-        """
-        Stop playing.
-        """
         command.check_arg_count(0)
         self.xbmc.stop()
 
@@ -520,74 +512,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             if predicate(song):
                 self._send_song(song)
 
-    def count_artist(self, artist):
-        """
-        Returns the number of all songs in the library and the total playtime.
-
-        Uses _send_lists() to push data to the client
-        """
-        count = self.xbmc.count_artist(artist)
-        self._send_lists([['songs', count[0]],
-                          ['playtime', count[1]]])
-
-    def plchanges(self, old_playlist_id=0, send=True):
-        """
-        Returns a list of playlist changes.
-
-        Uses _send_lists() to push data to the client
-        """
-        #TODO: Implement this!
-        #set(L1) ^ set(L2)
-        playlist = self.xbmc.get_current_playlist()
-        playlistlist = []
-
-        pos = 0
-        if playlist != [None]:
-            for song in playlist:
-                playlistlist.append(['file', song['file'].replace(self.musicpath, '')])
-                if 'duration' in song:
-                    playlistlist.append(['Time', song['duration']])
-                if 'artist' in song:
-                    playlistlist.append(['Artist', song['artist']])
-                if 'title' in song:
-                    playlistlist.append(['Title', song['title']])
-                if 'album' in song:
-                    playlistlist.append(['Album', song['album']])
-                if 'track' in song:
-                    playlistlist.append(['Track', song['track']])
-                if 'year' in song:
-                    playlistlist.append(['Date', song['year']])
-                if 'genre' in song:
-                    playlistlist.append(['Genre', song['genre']])
-                playlistlist.append(['Pos', pos])
-                playlistlist.append(['Id', pos])
-                pos += 1
-
-            self.playlist_dict[self.playlist_id] = playlistlist
-            old_playlist = (tuple(info) for info in self.playlist_dict[old_playlist_id])
-            diff = []
-            for plinfo in playlistlist:
-                if tuple(plinfo) not in old_playlist:
-                    diff.append(plinfo)
-            #plchanges = set(self.playlist_dict[old_playlist_id]) ^ set(playlistlist)
-            if send:
-                self._send_lists(diff)
-        else:
-            self._send()
-
-    def plchangesposid(self, old_playlist_id=0, send=True):
-        """
-        This should actually not call plchanges.
-        The correct implementation would be:
-
-        "This function only returns the position and the id of the changed song,
-        not the complete metadata. This is more bandwidth efficient."
-
-        But it shall work for now - TODO : As stated above !
-        """
-
-        self.plchanges(old_playlist_id,send)
-
     def currentsong(self, command):
         """
         Returns informations about the current song.
@@ -604,6 +528,9 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         Otherwise a simple 'OK' is returned via _send()
         """
+
+        # TODO: rewrite and test this.
+
         command.check_arg_count(0)
 
         status = self.xbmc.get_current_song()

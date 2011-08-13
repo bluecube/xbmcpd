@@ -228,13 +228,6 @@ class XBMCControl(object):
             fields=[], limits={'start':0, 'end':1})['limits']['total']
 
     def _refresh_temp_data(self):
-        self.artistdict = self._build_dict(
-            self.call.AudioLibrary.GetArtists(fields=[])['artists'], 'artistid')
-        self.albumdict = self._build_dict(
-            self.call.AudioLibrary.GetAlbums(fields=[])['albums'], 'albumid')
-        self.genredict = self._build_dict(
-            self.call.AudioLibrary.GetGenres(fields=[])['genres'], 'genreid')
-
         self._all_songs = self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
 
     def _build_dict(self, items, id_field):
@@ -248,21 +241,6 @@ class XBMCControl(object):
         List of all songs
         """
         return self._all_songs
-
-    def count_artist(self, artist):
-        """
-        Get number of songs by the specified artist and the total duration.
-
-        Returns number of songs, total duration
-        """
-        response = self.call.MusicLibrary.GetSongs(
-            artistid=self.artistdict[artist], fields=['duration'])
-
-        duration = 0
-        for song in response['songs']:
-            duration += song['duration']
-
-        return response['limits']['total'], duration
 
     def seekto(self, time):
         """
