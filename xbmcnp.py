@@ -110,6 +110,7 @@ class XBMCControl(object):
 
         try:
             state = self.call.AudioPlaylist.State()
+            pprint(state)
         except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
@@ -143,24 +144,18 @@ class XBMCControl(object):
             ret["state"] = "stop"
             return ret
 
-        labels = self.call.System.GetInfoLabels([
-            'MusicPlayer.BitRate',
-            'MusicPlayer.SampleRate',
-            'MusicPlayer.Time',
-            'MusicPlayer.Duration',
-            'MusicPlayer.PlaylistPosition'])
+        ret["song"] = state['current']
 
-        minutes, seconds = labels['MusicPlayer.Time'].split(':')
-        time = 60 * int(minutes) + int(seconds)
-        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
-        duration = 60 * int(minutes) + int(seconds)
-        ret["time"] = "{}:{}".format(time, duration)
+        time = self.call.AudioPlayer.GetTime()
+        elapsed = self._process_time(time['time'])
+        duration = self._process_time(time['total'])
 
-        ret["bitrate"] = labels['MusicPlayer.BitRate']
-        ret["audio"] = labels["MusicPlayer.SampleRate"] + ":24:2"
-        ret["song"] = labels["MusicPlayer.PlaylistPosition"]
+        ret["time"] = "{}:{}".format(elapsed, duration)
 
         return ret
+
+    def _process_time(self, time):
+        return 3600 * time['hours'] + 60 * time['minutes'] + time['seconds']
         
     def get_volume(self):
         """

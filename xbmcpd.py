@@ -142,7 +142,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
-        'playid','stop','seek', 'playlistinfo', 'playlistid'}
+        'playid','stop','seek', 'playlistinfo', 'playlistid',
+        'plchanges', 'plchangesposid'}
 
     # Tags that we support.
     # MPD tag -> XBMC tag
@@ -303,11 +304,17 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.playlistinfo(command)
         #TODO: Is this all right?
 
+    def plchanges(self, command):
+        self.playlistinfo(command)
+        #TODO: Is this all right?
+
+    def plchangesposid(self, command):
+        self.playlistinfo(command)
+        #TODO: Is this all right?
+
     def status(self, command):
         """
         Player status from xbmc.
-
-        Uses _send_lists() to push data to the client
         """
         command.check_arg_count(0)
         status = self.xbmc.get_status()
