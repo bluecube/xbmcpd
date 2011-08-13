@@ -241,7 +241,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
                 if self.command_list_ok:
                     self._send_line(u'list_OK')
         except MPDError as e:
-            logging.error(e.text + ' ({})'.format(unicode(command)))
+            logging.error(e.text + u' ({})'.format(unicode(command)))
             self._send_line(unicode(e))
         except Exception as e:
             logging.critical(u'Caught an exception!', exc_info=True)
