@@ -422,7 +422,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         List command.
         """
         # list genre album "Café del Mar, volumen seis" artist "A New Funky Generation"
-        #TODO: Speed this up by specialcasing the simple filters (XBMC has some filtering).
 
         if len(command.args) == 0:
             raise command.arg_count_exception()
@@ -490,7 +489,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Find command.
         """
         # find album "Café del Mar, volumen seis" artist "A New Funky Generation"
-        #TODO: Speed this up by specialcasing the simple filters (XBMC has some filtering).
 
         if len(command.args) < 2:
             raise command.arg_count_exception()
@@ -499,6 +497,28 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         for song in self._filtered_songs(filterdict):
             self._send_song(song)
+
+    def count(self, command):
+        """
+        Count command.
+        """
+        # count album "Café del Mar, volumen seis" artist "A New Funky Generation"
+
+        if len(command.args) < 2:
+            raise command.arg_count_exception()
+
+        filterdict = self._make_filter(command.args)
+
+        count = 0
+        playtime = 0
+
+        for song in self._filtered_songs(filterdict):
+            count += 1
+            playtime += song['duration']
+
+        self._send_lists([
+            ('songs', count),
+            ('playtime', playtime)])
 
     def currentsong(self, command):
         """
