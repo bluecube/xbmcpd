@@ -19,6 +19,7 @@
 import itertools
 import logging
 import re
+import operator
 import twisted.internet.reactor
 import twisted.internet.protocol
 import twisted.protocols.basic
@@ -454,15 +455,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             
         if len(command.args) == 2:
             if tagtype == 'Album':
-                filterdict = {'Album': command.args[1]}
+                filter_list = {'Album': command.args[1]}
             else:
                 raise MPDError(self, MPDError.ACK_ERROR_ARG, 
                     u'tag type must be "Album" for 2 argument version')
         else:
-            filterdict = self._make_filter(command.args[1:])
+            filter_list = self._make_filter(command.args[1:])
 
         tags = set((song[self.MPD_TAG_TO_XBMC_TAG[tagtype]] for
-            song in self._filtered_songs(filterdict)))
+            song in self._filtered_songs(filter_list)))
 
         self._send_lists([(tagtype, tag) for tag in tags])
     
@@ -475,29 +476,32 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             raise MPDError(self, MPDError.ACK_ERROR_ARG,
                 u'not able to parse args')
 
-        filterdict = {}
-        for tag, value in zip(arguments[0::2], arguments[1::2]):
-            tag = tag.capitalize()
-            if tag != 'Any' and tag != 'File' and tag not in self.MPD_TAG_TO_XBMC_TAG:
+        filter_list = []
+        for rule, value in zip(arguments[0::2], arguments[1::2]):
+            rule = rule.capitalize()
+            if rule != 'Any' and rule != 'File' and rule not in self.MPD_TAG_TO_XBMC_TAG:
                 raise MPDError(self, MPDError.ACK_ERROR_ARG,
-                    u'tag type "{}" unrecognized'.format(tag))
-            filterdict[tag] = value
+                    u'tag type "{}" unrecognized'.format(rule))
+            filter_list.append((rule, value))
 
-        return filterdict
+        return filter_list
 
-    def _filtered_songs(self, filterdict):
+    def _filtered_songs(self, filter_list):
+        """
+        Return a list of songs that satisfy the list of filter rules.
+        """
 
         def predicate(song):
-            return self._filter_predicate(filterdict, lambda a, b: a == b, song)
+            return self._filter_predicate(filter_list, operator.eq, song)
 
         return itertools.ifilter(predicate, self.xbmc.list_songs())
 
-    def _filter_predicate(self, filterdict, compare, song):
+    def _filter_predicate(self, filter_list, compare, song):
         """
-        Should the given song be selected based on the filterdict and compare function?
+        Should the given song be selected based on the filter_list and compare function?
         """
         match = True
-        for rule, value in filterdict.items():
+        for rule, value in filter_list:
             if rule == 'file':
                 match &= (compare(value, self._xbmc_path_to_mpd_path(song['file'])))
             elif rule == 'any':
@@ -519,9 +523,9 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if len(command.args) < 2:
             raise command.arg_count_exception()
 
-        filterdict = self._make_filter(command.args)
+        filter_list = self._make_filter(command.args)
 
-        for song in self._filtered_songs(filterdict):
+        for song in self._filtered_songs(filter_list):
                 self._send_song(song)
 
     def count(self, command):
@@ -533,12 +537,12 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if len(command.args) < 2:
             raise command.arg_count_exception()
 
-        filterdict = self._make_filter(command.args)
+        filter_list = self._make_filter(command.args)
 
         count = 0
         playtime = 0
 
-        for song in self._filtered_songs(filterdict):
+        for song in self._filtered_songs(filter_list):
             count += 1
             playtime += song['duration']
 
@@ -555,13 +559,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if len(command.args) < 2:
             raise command.arg_count_exception()
 
-        filterdict = self._make_filter(command.args)
+        filter_list = self._make_filter(command.args)
 
-        def predicate(song):
-            return self._filter_predicate(filterdict, lambda a, b: a.lower() in b.lower(), song)
+        def contains_lcase(a, b):
+            return a.lower() in b.lower()
 
         for song in self.xbmc.list_songs():
-            if predicate(song):
+            if self._filter_predicate(filter_list, contains_lcase, song):
                 self._send_song(song)
 
     def currentsong(self, command):
