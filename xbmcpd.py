@@ -502,15 +502,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         match = True
         for rule, value in filter_list:
-            if rule == 'file':
+            if rule == 'File':
                 match &= (compare(value, self._xbmc_path_to_mpd_path(song['file'])))
-            elif rule == 'any':
+            elif rule == 'Any':
                 tmpmatch = False
                 for xbmctag in self.MPD_TAG_TO_XBMC_TAG.values():
-                    tmpmatch |= (compare(value, song[xbmctag]))
+                    tmpmatch |= (compare(value, unicode(song[xbmctag])))
                 match &= tmpmatch
             else:
-                match &= (compare(value, song[self.MPD_TAG_TO_XBMC_TAG[rule]]))
+                match &= (compare(value, unicode(song[self.MPD_TAG_TO_XBMC_TAG[rule]])))
 
         return match
 
