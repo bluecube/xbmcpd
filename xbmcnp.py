@@ -167,6 +167,7 @@ class XBMCControl(object):
             return ret
 
         ret["song"] = state['current']
+        ret["songid"] = state['current']
 
         time = self.call.AudioPlayer.GetTime()
         elapsed = self._process_time(time['time'])
