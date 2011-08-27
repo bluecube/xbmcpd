@@ -291,15 +291,18 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def playlistinfo(self, command):
         command.check_arg_count(0, 1)
 
-        playlist_length = self.xbmc.get_playlist_length()
+        playlist = self.xbmc.get_current_playlist()
 
         if len(command.args) == 1:
             limits = command.args[0].as_range()
-        else:
-            limits = {'start': 0, 'end': -1}
 
-        for pos, song in enumerate(self.xbmc.get_current_playlist(limits)):
-            self._send_song(song, pos, pos)
+            for pos, song in enumerate(playlist[limits['start']:limits['end']]):
+                pos += limits['start']
+                self._send_song(song, pos, pos)
+            
+        else:
+            for pos, song in enumerate(playlist):
+                self._send_song(song, pos, pos)
 
     def playlistid(self, command):
         self.playlistinfo(command)
@@ -358,7 +361,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         command.check_arg_count(0)
         templist = [['outputid', 0],
-                    ['outputname', 'default output'],
+                    ['outputname', 'XBMC'],
                     ['outputenabled', 1]]
         self._send_lists(templist)
 
@@ -645,9 +648,12 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format=u'%(asctime)s %(message)s', datefmt=u'%x %X')
+    logging.info("XBMCpd starting")
 
-    logging.debug('downloading XBMC data')
     MPD.xbmc = xbmcnp.XBMCControl(settings.XBMC_JSONRPC_URL) #only to update the static info before the first request.
+
+    logging.debug("downloading library...")
+    MPD.xbmc.list_songs()
 
     factory = twisted.internet.protocol.ServerFactory()
     factory.protocol = MPD

@@ -16,8 +16,31 @@
 # You should have received a copy of the GNU General Public License
 # along with xbmcpd.  If not, see <http://www.gnu.org/licenses/>.
 
+import time
+import functools
+
 import jsonrpc.proxy
 from pprint import pprint
+
+def timed_cache(timeout):
+    def decorator(f):
+        cache = {}
+        
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            now = time.time()
+
+            key = (f, tuple(args), frozenset(kwargs.items()))
+
+            if key not in cache or cache[key][0] + timeout < now:
+                cache[key] = (now, f(*args, **kwargs))
+                
+            return cache[key][1]
+
+        return wrapper
+
+    return decorator
+
 
 class XBMCControl(object):
     """
@@ -46,13 +69,13 @@ class XBMCControl(object):
 
     SUPPORTED_VERSION = 3
 
+    PLAYLIST_TIMEOUT = 3
+    LIBRARY_TIMEOUT = 3600
+
     def __init__(self, url):
         self.call = jsonrpc.proxy.JSONRPCProxy.from_url(url)
 
         self._check_version()
-
-        #update the temporary data
-        self._refresh_temp_data()
         
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
@@ -110,7 +133,6 @@ class XBMCControl(object):
 
         try:
             state = self.call.AudioPlaylist.State()
-            pprint(state)
         except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
@@ -179,13 +201,14 @@ class XBMCControl(object):
     def list_playlists(self):
         return [] #TODO: Implement this when jsonrpc api supports listing playlists.
 
-    def get_current_playlist(self, limits):
+    @timed_cache(PLAYLIST_TIMEOUT)
+    def get_current_playlist(self):
         """
         Get the music playlist contents.
 
         Returns a list filled by each file's tags
         """
-        return self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS, limits=limits)['items']
+        return self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS)['items']
 
     def next(self):
         """
@@ -222,20 +245,12 @@ class XBMCControl(object):
         return self.call.AudioPlaylist.GetItems(
             fields=[], limits={'start':0, 'end':1})['limits']['total']
 
-    def _refresh_temp_data(self):
-        self._all_songs = self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
-
-    def _build_dict(self, items, id_field):
-        ret = {}
-        for item in items:
-            ret.setdefault(item['label'], []).append(item[id_field])
-        return ret
-
+    @timed_cache(LIBRARY_TIMEOUT)
     def list_songs(self):
         """
         List of all songs
         """
-        return self._all_songs
+        return self.call.AudioLibrary.GetSongs(fields=self.SONG_FIELDS)['songs']
 
     def seekto(self, time):
         """
