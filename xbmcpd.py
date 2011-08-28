@@ -150,7 +150,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     SUPPORTED_COMMANDS = {'status', 'stats', 'pause', 'play',
         'next', 'previous', 'lsinfo', 'add', 'find', 'search',
-        'deleteid', 'setvol', 'clear',
+        'deleteid', 'setvol', 'clear', 'currentsong',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
@@ -629,38 +629,16 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def currentsong(self, command):
         """
         Returns informations about the current song.
-
-        If there is a song the following information is pushed via _send_lists():
-            * File
-            * Time
-            * Artist
-            * Title
-            * Track
-            * Genre
-            * Position
-            * ID
-
-        Otherwise a simple 'OK' is returned via _send()
         """
-
-        # TODO: rewrite and test this.
-
         command.check_arg_count(0)
 
-        status = self.xbmc.get_current_song()
-        if status == None:
+        playlist = self.xbmc.get_current_playlist();
+
+        if self.xbmc.playlist_state is None:
             return
 
-        self._send_lists([
-            ['file', self._xbmc_path_to_mpd_path(status['Player.Filenameandpath'])],
-            ['Time', status['duration']],
-            ['Artist', status['MusicPlayer.Artist']],
-            ['Title', status['MusicPlayer.Title']],
-            ['Album', status['MusicPlayer.Album']],
-            ['Track', status['MusicPlayer.TrackNumber']],
-            ['Genre', status['MusicPlayer.Genre']],
-            ['Pos', status['MusicPlayer.PlaylistPosition']],
-            ['Id', status['MusicPlayer.PlaylistPosition']]])
+        current = self.xbmc.playlist_state['current']
+        self._send_song(playlist[current], current, current)
 
     def lsinfo(self, command):
         """

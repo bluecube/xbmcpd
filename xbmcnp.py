@@ -83,36 +83,6 @@ class XBMCControl(object):
             raise RuntimeError(
                 'Unsupported protocol version {}.'.format(jsonrpc_version))
     
-    def get_current_song(self):
-        """
-        Get currently playing file.
-
-        Returns a dictionary or None.
-        """
-
-        try:
-            state = self.call.AudioPlayer.State()
-        except jsonrpc.common.RPCError as e:
-            if e.code == -32100:
-                return None
-            else:
-                raise
-
-        labels = self.call.System.GetInfoLabels([
-            'MusicPlayer.Title',
-            'MusicPlayer.Artist',
-            'MusicPlayer.Album',
-            'MusicPlayer.TrackNumber',
-            'MusicPlayer.Genre',
-            'MusicPlayer.Duration',
-            'MusicPlayer.PlaylistPosition',
-            'Player.Filenameandpath'])
-
-        minutes, seconds = labels['MusicPlayer.Duration'].split(':')
-        labels['duration'] = 60 * int(minutes) + int(seconds)
-
-        return labels
-
     def get_library_stats(self):
         ret = {}
         ret["artists"] = self.call.AudioLibrary.GetSongs(
