@@ -155,7 +155,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
         'playid','stop','seek', 'playlistinfo', 'playlistid',
-        'plchanges', 'plchangesposid'}
+        'plchanges', 'plchangesposid', 'idle'}
 
     # Tags that we support.
     # MPD tag -> XBMC tag
@@ -179,6 +179,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.command_list_position = 0
         self.current_command = ''
         self.playlist_id = 1
+        self.idle_mode = False
 
     def _xbmc_path_to_mpd_path(self, path):
         """
@@ -259,8 +260,9 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self._send_line(unicode(MPDError(
                 self, MPDError.ACK_ERROR_SYSTEM, u'Internal server error, sorry.')))
         else:
-            logging.debug(u'OK')
-            self._send_line('OK')
+            if not self.idle_mode:
+                logging.debug(u'OK')
+                self._send_line('OK')
 
     def _send_line(self, line):
         encoded = line.encode('utf8')
@@ -276,7 +278,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         command = Command(data.rstrip('\r').decode(u'utf8'), self)
 
-        if command.name() == u'command_list_begin':
+        if self.idle_mode:
+            if command.name() == u'noidle':
+                self._noidle([])
+        elif command.name() == u'command_list_begin':
             logging.debug(u'command list started')
             self.command_list = []
             self.command_list_started = True
@@ -296,6 +301,32 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         else:
             self.command_list = [command]
             self._process_command_list()
+
+    def idle(self, command):
+        """
+        Start the idle mode.
+        By setting the self.idle_mode flag this command gets a special
+        treatment -- 'OK' isn't sent after this is processed.
+        """
+        command.check_arg_count(0)
+
+        if self.command_list_started:
+            raise MPDError(MPDError.ACK_ERROR_SYSTEM, 
+                u'idle inside command list is stupid')
+
+        self.idle_mode = True
+
+    def _noidle(self, changed):
+        """
+        Cancel running idle command.
+        """
+        assert self.idle_mode
+
+        logging.debug(u'wake up (' + u', '.join(changed) + u')')
+
+        self._send_lists(('changed', subsystem) for subsystem in changed)
+        self.idle_mode = False
+        self._send_line('OK')
 
     def playlistinfo(self, command):
         command.check_arg_count(0, 1)
