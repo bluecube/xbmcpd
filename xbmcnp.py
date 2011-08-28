@@ -131,43 +131,40 @@ class XBMCControl(object):
     def get_status(self):
         ret = {}
 
-        try:
-            state = self.call.AudioPlaylist.State()
-        except jsonrpc.common.RPCError as e:
-            if e.code != -32100:
-                raise
+        self.get_current_playlist()
 
+        if self.playlist_state is None:
             ret["single"] = 0
             ret["repeat"] = 0
             ret["random"] = 0
             ret["state"] = "stop"
-
             return ret
 
-        if state["repeat"] == "all":
+        if self.playlist_state["repeat"] == "all":
             ret["repeat"] = 1
             ret["single"] = 0
-        elif state["repeat"] == "one":
+        elif self.playlist_state["repeat"] == "one":
             ret["repeat"] = 1
             ret["single"] = 1
         else:
             ret["repeat"] = 0
+            ret["single"] = 0
 
-        if state["shuffled"]:
+        if self.playlist_state["shuffled"]:
             ret["random"] = 1
         else:
             ret["random"] = 0
         
-        if state["paused"]:
+        if self.playlist_state["paused"]:
             ret["state"] = "paused"
-        elif state["playing"]:
+        elif self.playlist_state["playing"]:
             ret["state"] = "play"
         else:
             ret["state"] = "stop"
             return ret
 
-        ret["song"] = state['current']
-        ret["songid"] = state['current']
+        ret["song"] = self.playlist_state['current']
+        ret["songid"] = self.playlist_state['current']
 
         time = self.call.AudioPlayer.GetTime()
         elapsed = self._process_time(time['time'])
@@ -209,7 +206,18 @@ class XBMCControl(object):
 
         Returns a list filled by each file's tags
         """
-        return self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS)['items']
+        x = self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS)
+        if 'state' in x:
+            self.playlist_state = x['state'] #TODO: This is ugly.
+        else:
+            self.playlist_state = None
+
+        #TODO: The try block is here to hunt for a particulary sneaky bug. Remove this after its fixed.
+        try:
+            return x['items']
+        except:
+            pprint(x)
+            raise
 
     def next(self):
         """
