@@ -131,6 +131,17 @@ class Argument(unicode):
         except ValueError:
             self._exception('need a number')
 
+    def as_bool(self):
+        """
+        Convert "0" or "1" to bool or raise mpd error.
+        """
+        if self == '0':
+            return False
+        elif self == '1':
+            return True
+        else:
+            self._exception('boolean (0/1) expected')
+
 
 class MPD(twisted.protocols.basic.LineOnlyReceiver):
     """
@@ -428,17 +439,32 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     def playid(self, command):
         """
-        Get a song by it's id and play it.
+        Get a song by it's id and play it or play the current song.
         """
-        command.check_arg_count(1)
-        self.xbmc.playid(command.args[0].as_int())
+        command.check_arg_count(0, 1)
+
+        if len(command.args) == 0:
+            self.xbmc.playpause()
+        else:
+            self.xbmc.playid(command.args[0].as_int())
 
     def play(self, command):
-        command.check_arg_count(0)
-        self.xbmc.playpause()
+        """
+        Since song ids and playlist position are the same,
+        this function behaves exactly like playid.
+        """
+        self.playid(command)
 
     def pause(self, command):
-        command.check_arg_count(0)
+        """
+        Pause or unpause playback.
+        """
+        #TODO: This method toggles play/pause state no matter what the parameter is.
+        command.check_arg_count(0, 1)
+
+        if len(command.args) == 1:
+            command.args[0].as_bool()
+
         self.xbmc.playpause()
 
     def list(self, command):
