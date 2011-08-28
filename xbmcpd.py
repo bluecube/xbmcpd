@@ -179,8 +179,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.command_list_position = 0
         self.current_command = ''
         self.playlist_id = 1
-        self.playlist_dict = {0 : []}
-        #self.plchanges(send=False)
 
     def _xbmc_path_to_mpd_path(self, path):
         """
