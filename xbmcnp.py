@@ -239,13 +239,6 @@ class XBMCControl(object):
         """
         self.call.XBMC.SetVolume(int(volume))
 
-    def get_playlist_length(self):
-        """
-        Get the playlist length.
-        """
-        return self.call.AudioPlaylist.GetItems(
-            fields=[], limits={'start':0, 'end':1})['limits']['total']
-
     @timed_cache(LIBRARY_TIMEOUT)
     def list_songs(self):
         """

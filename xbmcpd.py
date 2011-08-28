@@ -327,7 +327,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             [['volume', self.xbmc.get_volume()],
             ['consume', 0],
             ['playlist', self.playlist_id],
-            ['playlistlength', self.xbmc.get_playlist_length()]]))
+            ['playlistlength', len(self.xbmc.get_current_playlist())]]))
 
     def stats(self, command):
         """
