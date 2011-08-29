@@ -411,13 +411,23 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def stats(self, command):
         """
         Fetches library statistics from xbmc.
-
-        Uses _send_lists() to push data to the client
         """
-        #TODO: check this.
-        command.check_arg_count(0)
-        stats = self.xbmc.get_library_stats()
-        self._send_lists([[x, stats[x]] for x in stats.keys()])
+        playtime = 0
+
+        songs = self.xbmc.list_songs()
+        artists = set()
+        albums = set()
+
+        for song in songs:
+            playtime += song['duration']
+            artists.add(song['artist'])
+            albums.add(song['album'])
+
+        self._send_lists([
+            ('songs', len(songs)),
+            ('artists', len(artists)),
+            ('albums', len(albums)),
+            ('db_playtime', playtime)])
 
     def tagtypes(self, command):
         """

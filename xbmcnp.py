@@ -82,21 +82,6 @@ class XBMCControl(object):
         if jsonrpc_version != self.SUPPORTED_VERSION:
             raise RuntimeError(
                 'Unsupported protocol version {}.'.format(jsonrpc_version))
-    
-    def get_library_stats(self):
-        ret = {}
-        ret["artists"] = self.call.AudioLibrary.GetSongs(
-            limits={'start':0, 'end':1})['limits']['total']
-        ret["albums"] = self.call.AudioLibrary.GetAlbums(
-            limits={'start':0, 'end':1})['limits']['total']
-
-        songs = self.call.AudioLibrary.GetSongs(fields=["duration"])
-        
-        ret["songs"] = songs['limits']['total']
-
-        ret["db_playtime"] = sum([x["duration"] for x in songs["songs"]])
-
-        return ret
 
     def get_time(self):
         """
