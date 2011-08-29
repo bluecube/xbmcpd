@@ -383,7 +383,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             return
 
         if playlist_state['paused']:
-            state = 'paused'
+            state = 'pause'
         elif playlist_state['playing']:
             state = 'play'
         else:
@@ -512,7 +512,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         command.check_arg_count(0, 1)
 
         if len(command.args) == 0:
-            self.xbmc.playpause()
+            self.xbmc.play()
         else:
             self.xbmc.playid(command.args[0].as_int())
 
@@ -527,13 +527,12 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         Pause or unpause playback.
         """
-        #TODO: This method toggles play/pause state no matter what the parameter is.
         command.check_arg_count(0, 1)
 
-        if len(command.args) == 1:
-            command.args[0].as_bool()
-
-        self.xbmc.playpause()
+        if len(command.args) == 0 or command.args[0].as_bool():
+            self.xbmc.pause()
+        else:
+            self.xbmc.play()
 
     def list(self, command):
         """

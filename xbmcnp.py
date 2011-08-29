@@ -206,15 +206,31 @@ class XBMCControl(object):
 
     def playpause(self):
         """
-        Toggle play or pause.
+        Toggle play or pause, updates the playlist state.
         """
         try:
-            self.call.AudioPlayer.PlayPause()
+            result = self.call.AudioPlayer.PlayPause()
         except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
 
-            self.call.AudioPlaylist.Play(0)
+            self.call.AudioPlaylist.Play()
+        else:
+            self.playlist_state.update(result)
+
+    def play(self):
+        self.update_playlist_state()
+
+        if self.playlist_state is None or self.playlist_state['paused']:
+            self.playpause()
+
+    def pause(self):
+        self.update_playlist_state()
+        
+        if self.playlist_state is None or self.playlist_state['paused']:
+            return
+
+        self.playpause()
 
     def remove_from_playlist(self, pos):
         """
@@ -245,3 +261,17 @@ class XBMCControl(object):
         Clear the current playlist
         """
         self.call.AudioPlaylist.Clear()
+
+    def update_playlist_state(self):
+        """
+        Forces playlist state update.
+        (otherwise state is updated only in get_current_playlist when
+        cache times out)
+        """
+        try:
+            self.playlist_state = self.call.AudioPlaylist.State()
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32602:
+                raise
+        
+            self.playlist_state = None
