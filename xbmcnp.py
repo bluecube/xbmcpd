@@ -103,6 +103,16 @@ class XBMCControl(object):
 
         self.get_current_playlist()
 
+        try:
+            time = self.call.AudioPlayer.GetTime()
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32100:
+                raise
+
+            # If player was stopped after the last playlist update
+            # we wouldn't know
+            self.playlist_state = None
+
         if self.playlist_state is None:
             ret["single"] = 0
             ret["repeat"] = 0
@@ -136,7 +146,6 @@ class XBMCControl(object):
         ret["song"] = self.playlist_state['current']
         ret["songid"] = self.playlist_state['current']
 
-        time = self.call.AudioPlayer.GetTime()
         elapsed = self._process_time(time['time'])
         duration = self._process_time(time['total'])
 
@@ -186,7 +195,6 @@ class XBMCControl(object):
         try:
             return x['items']
         except:
-            pprint(x)
             raise
 
     def next(self):
