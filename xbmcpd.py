@@ -361,13 +361,52 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         Player status from xbmc.
         """
         command.check_arg_count(0)
-        status = self.xbmc.get_status()
-        self._send_lists(
-            itertools.chain([[x, status[x]] for x in status.keys()],
-            [['volume', self.xbmc.get_volume()],
-            ['consume', 0],
-            ['playlist', self.playlist_id],
-            ['playlistlength', len(self.xbmc.get_current_playlist())]]))
+    
+        playlist = self.xbmc.get_current_playlist()
+        playlist_state = self.xbmc.playlist_state
+        time = self.xbmc.get_time()
+        volume = self.xbmc.get_volume()
+
+        
+        self._send_lists([
+            ('volume', volume),
+            ('consume', 0),
+            ('playlist', self.playlist_id),
+            ('playlistlength', len(playlist))])
+
+        if playlist_state is None or time is None:
+            self._send_lists([
+                ('single', 0),
+                ('repeat', 0),
+                ('random', 0),
+                ('state', 'stop')])
+            return
+
+        if playlist_state['paused']:
+            state = 'paused'
+        elif playlist_state['playing']:
+            state = 'play'
+        else:
+            state = 'stop'
+
+        if playlist_state['repeat'] == 'all':
+            self._send_lists([
+                ('repeat', 1),
+                ('single', 0)])
+        elif playlist_state['repeat'] == 'one':
+            self._send_lists([
+                ('repeat', 1),
+                ('single', 1)])
+        else:
+            self._send_lists([
+                ('repeat', 0),
+                ('single', 0)])
+            
+        self._send_lists([
+            ('state', state),
+            ('song', playlist_state['current']),
+            ('songid', playlist_state['current']),
+            ('time', '{}:{}'.format(*time))])
 
     def stats(self, command):
         """

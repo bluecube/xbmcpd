@@ -98,60 +98,20 @@ class XBMCControl(object):
 
         return ret
 
-    def get_status(self):
-        ret = {}
-
-        self.get_current_playlist()
-
+    def get_time(self):
+        """
+        Return a tuple with elapsed time and duration of the current song
+        or None if player is stopped.
+        """
         try:
             time = self.call.AudioPlayer.GetTime()
         except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
 
-            # If player was stopped after the last playlist update
-            # we wouldn't know
-            self.playlist_state = None
+            return None
 
-        if self.playlist_state is None:
-            ret["single"] = 0
-            ret["repeat"] = 0
-            ret["random"] = 0
-            ret["state"] = "stop"
-            return ret
-
-        if self.playlist_state["repeat"] == "all":
-            ret["repeat"] = 1
-            ret["single"] = 0
-        elif self.playlist_state["repeat"] == "one":
-            ret["repeat"] = 1
-            ret["single"] = 1
-        else:
-            ret["repeat"] = 0
-            ret["single"] = 0
-
-        if self.playlist_state["shuffled"]:
-            ret["random"] = 1
-        else:
-            ret["random"] = 0
-        
-        if self.playlist_state["paused"]:
-            ret["state"] = "paused"
-        elif self.playlist_state["playing"]:
-            ret["state"] = "play"
-        else:
-            ret["state"] = "stop"
-            return ret
-
-        ret["song"] = self.playlist_state['current']
-        ret["songid"] = self.playlist_state['current']
-
-        elapsed = self._process_time(time['time'])
-        duration = self._process_time(time['total'])
-
-        ret["time"] = "{}:{}".format(elapsed, duration)
-
-        return ret
+        return (self._process_time(time['time']), self._process_time(time['total']))
 
     def _process_time(self, time):
         return 3600 * time['hours'] + 60 * time['minutes'] + time['seconds']
