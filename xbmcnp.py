@@ -22,6 +22,8 @@ import functools
 import jsonrpc.proxy
 from pprint import pprint
 
+import settings
+
 def timed_cache(timeout):
     def decorator(f):
         cache = {}
@@ -111,14 +113,26 @@ class XBMCControl(object):
 
     def get_directory(self, path):
         """
-        Get directory informations.
-
-        Returns a list of subdirectories and musicfiles
+        Get list of files, list of directories and list of playlists.
         """
-        return self.call.Files.GetDirectory(directory=path,
-            fields=self.ALL_FIELDS,
-            media='music')['files']
         #TODO: Attempting to list a nonexistent directory causes an exception. Detect it.
+
+        filelist = []
+        dirlist = []
+        pllist = []
+
+        for f in self.call.Files.GetDirectory(
+            directory=path, fields=self.ALL_FIELDS, media='music')['files']:
+            if f['filetype'] == 'directory':
+                if f['file'].endswith(settings.XBMC_PATH_SEP):
+                    dirlist.append(f)
+                else:
+                    pllist.append(f)
+            else:
+                filelist.append(f)
+
+        return (filelist, dirlist, pllist)
+
 
     def list_playlists(self):
         return [] #TODO: Implement this when jsonrpc api supports listing playlists.
@@ -136,11 +150,7 @@ class XBMCControl(object):
         else:
             self.playlist_state = None
 
-        #TODO: The try block is here to hunt for a particulary sneaky bug. Remove this after its fixed.
-        try:
-            return x['items']
-        except:
-            raise
+        return x.get('items', [])
 
     def next(self):
         """

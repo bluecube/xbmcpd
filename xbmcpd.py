@@ -698,30 +698,22 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             path = command.args[0]
         else:
             path = ''
+        path = self._mpd_path_to_xbmc_path(path)
 
-        filelist = []
-        dirlist = []
-        pllist = []
+        filelist, dirlist, pllist = self.xbmc.get_directory(path)
 
-        for f in self.xbmc.get_directory(self._mpd_path_to_xbmc_path(path)):
-            filepath = self._xbmc_path_to_mpd_path(f['file'])
-            if f['filetype'] == 'directory':
-                if f['file'].endswith(settings.XBMC_PATH_SEP):
-                    dirlist.append(['directory', filepath])
-                else:
-                    pllist.append(['playlist', filepath])
-            else:
-                filelist.append(f)
+        for d in dirlist:
+            self._send_lists([('directory',
+                self._xbmc_path_to_mpd_path(d['file']))])
+        for f in filelist:
+            self._send_song(f)
+        for pl in pllist:
+            self._send_lists([('playlist',
+                self._xbmc_path_to_mpd_path(pl['file']))])
 
         if path.strip('/') == '':
             for pl in self.xbmc.list_playlists():
-                pllist.append(['playlist', pl['label']])
-
-
-        self._send_lists(dirlist)
-        for f in filelist:
-            self._send_song(f)
-        self._send_lists(pllist)
+                self._send_lists(['playlist', pl['label']])
 
     def close(self, command):
         command.check_arg_count(0)
