@@ -238,7 +238,7 @@ class XBMCControl(object):
         """
         Add the given path to the playlist.
         """
-        # TODO: This is a little hack ...
+        # This is a little hack ...
         # XBMC wants to know if the item added is a file or a directory
         # so we try to add the item as a file and if this fails try adding
         # it as a directory
@@ -250,6 +250,20 @@ class XBMCControl(object):
                 raise
 
         self.call.AudioPlaylist.Add({'directory': path})
+
+    def insert_into_playlist(self, path, position):
+        """
+        Add given path to the playlist at a position.
+        """
+        #The same hack as for add_to_playlist
+        try:
+            self.call.AudioPlaylist.Insert(position, {'file': path})
+            return
+        except jsonrpc.common.RPCError as e:
+            if e.code != -32602:
+                raise
+
+        self.call.AudioPlaylist.Insert(position, {'directory': path})
 
     def clear(self):
         """
@@ -270,3 +284,11 @@ class XBMCControl(object):
                 raise
         
             self.playlist_state = None
+
+    def force_playlist_update(self):
+        """
+        Imediately download a new playlist and discard the cached version.
+        To be used with playlist modifying functions.
+        """
+        pass
+        #TODO: Write this function

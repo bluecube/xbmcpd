@@ -149,7 +149,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     """
 
     SUPPORTED_COMMANDS = {'status', 'stats', 'pause', 'play',
-        'next', 'previous', 'lsinfo', 'add', 'find', 'search',
+        'next', 'previous', 'lsinfo', 'add', 'addid', 'find', 'search',
         'deleteid', 'setvol', 'clear', 'currentsong',
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
@@ -374,7 +374,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         for pos, song in enumerate(self.playlist):
             self._send_song(song, pos, pos)
         
-
     def plchangesposid(self, command):
         """
         Send numbers from 0 to length of playlist - 1.
@@ -508,18 +507,42 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         song_id = command.args[0].as_int()
         self.xbmc.remove_from_playlist(song_id)
 
+        self.xbmc.force_playlist_update()
+
     def add(self, command):
         """
         Adds a specified path to the playlist.
         """
         command.check_arg_count(1)
+        path = self._mpd_path_to_xbmc_path(command.args[0])
+        self.xbmc.add_to_playlist(path)
 
-        path = command.args[0]
-        self.xbmc.add_to_playlist(self._mpd_path_to_xbmc_path(path))
+        self.xbmc.force_playlist_update()
+
+    def addid(self, command):
+        """
+        Adds a specified path to the playlist and return its id.
+        """
+        command.check_arg_count(1, 2)
+
+        path = self._mpd_path_to_xbmc_path(command.args[0])
+
+        if len(command.args) == 1:
+            index = len(self.playlist)
+            self.xbmc.add_to_playlist(path)
+            self._send_lists([('Id', index)])
+        else:
+            position = command.args[1].as_int()
+            self.xbmc.insert_into_playlist(position, path)
+            self._send_lists([('Id', position)])
+
+        self.xbmc.force_playlist_update()
 
     def clear(self, command):
         command.check_arg_count(0)
         self.xbmc.clear()
+
+        self.xbmc.force_playlist_update()
 
     def next(self, command):
         command.check_arg_count(0)
