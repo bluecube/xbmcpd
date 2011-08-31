@@ -155,7 +155,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
         'playid','stop','seek', 'playlistinfo', 'playlistid',
-        'plchanges', 'plchangesposid', 'idle'}
+        'plchanges', 'plchangesposid', 'idle',
+        'listall', 'listallinfo'}
 
     # Tags that we support.
     # MPD tag -> XBMC tag
@@ -231,6 +232,12 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             lines.append(('Id', ident))
             
         self._send_lists(lines)
+
+    def _send_path(self, label, xbmc_path):
+        """
+        Send 'label: path' to client.
+        """
+        self._send_lists([(label, self._xbmc_path_to_mpd_path(xbmc_path))])
 
     def _process_command_list(self):
         try:
@@ -714,6 +721,58 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         if path.strip('/') == '':
             for pl in self.xbmc.list_playlists():
                 self._send_lists(['playlist', pl['label']])
+
+    def listall(self, command):
+        """
+        Returns all files under the given path.
+        """
+        command.check_arg_count(0, 1)
+
+        if len(command.args) == 1:
+            path = command.args[0]
+        else:
+            path = ''
+        path = self._mpd_path_to_xbmc_path(path)
+
+        def file_fun(f):
+            self._send_path('file', f['file'])
+
+        self._walk_xbmc_files(file_fun, path)
+
+    def listallinfo(self, command):
+        """
+        Returns all files under the given path.
+        """
+        command.check_arg_count(0, 1)
+
+        if len(command.args) == 1:
+            path = command.args[0]
+        else:
+            path = ''
+        path = self._mpd_path_to_xbmc_path(path)
+
+        def file_fun(f):
+            self._send_song(f)
+
+        self._walk_xbmc_files(file_fun, path)
+
+    def _walk_xbmc_files(self, file_fun, xbmc_path):
+        """
+        Walking the XBMC directory structure.
+        """
+
+        self._send_path('directory', xbmc_path)
+
+        filelist, dirlist, pllist = self.xbmc.get_directory(xbmc_path)
+
+        for d in dirlist:
+           self._walk_xbmc_files(file_fun, d['file'])
+
+        for f in filelist:
+            file_fun(f)
+        
+        for p in pllist:
+            self._send_path('playlist', p['file'])
 
     def close(self, command):
         command.check_arg_count(0)
