@@ -74,10 +74,11 @@ class XBMCControl(object):
     PLAYLIST_TIMEOUT = 3
     LIBRARY_TIMEOUT = 3600
 
-    def __init__(self, url):
+    def __init__(self, url, path_sep='/'):
         self.call = jsonrpc.proxy.JSONRPCProxy.from_url(url)
 
         self._check_version()
+        self.path_sep = path_sep
         
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
@@ -124,7 +125,7 @@ class XBMCControl(object):
         for f in self.call.Files.GetDirectory(
             directory=path, fields=self.ALL_FIELDS, media='music')['files']:
             if f['filetype'] == 'directory':
-                if f['file'].endswith(settings.XBMC_PATH_SEP):
+                if f['file'].endswith(self.path_sep):
                     dirlist.append(f)
                 else:
                     pllist.append(f)

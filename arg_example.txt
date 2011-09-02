@@ -1,0 +1,9 @@
+--url
+http://10.0.0.200/jsonrpc
+--port
+6601
+--musicpath
+E:\data\Hudba
+--pathsep
+\
+--verbose
