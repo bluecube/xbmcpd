@@ -22,7 +22,6 @@ import functools
 import jsonrpc.proxy
 from pprint import pprint
 
-import settings
 
 def timed_cache(timeout):
     def decorator(f):

@@ -14,6 +14,6 @@ Only NCMI/jsonrpc.
   --pathsep PATHSEP     path separator on the xbmc machine (default: '/')  
   --verbose             enable debugging outputs
 
-Arguments may be put into configuration files. See the
+Arguments may be turned into configuration files using '@' prefix. See the
 [argparse docs](http://docs.python.org/library/argparse.html#fromfile-prefix-chars)
 and arg_example.txt in the project directory.

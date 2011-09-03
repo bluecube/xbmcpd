@@ -20,7 +20,6 @@ import logging
 import twisted.internet.reactor
 import twisted.internet.protocol
 import twisted.protocols.basic
-import settings
 import argparse
 
 import mpd
@@ -32,7 +31,7 @@ arg_parser = argparse.ArgumentParser(
 
 arg_parser.add_argument('--url', default='http://localhost/jsonrpc',
     help="URL of the JSONRPC interface (default: %(default)s)")
-arg_parser.add_argument('--port', '-p', default=6000,
+arg_parser.add_argument('--port', '-p', default=6000, type=int,
     help="port for the MPD server (default: %(default)s)")
 arg_parser.add_argument('--musicpath', required=True,
     help="root of the music database on the XBMC machine")
@@ -55,8 +54,8 @@ logging.debug("downloading library...")
 
 factory = twisted.internet.protocol.ServerFactory()
 factory.protocol = mpd.MPD
-twisted.internet.reactor.listenTCP(settings.MPD_PORT, factory)
+twisted.internet.reactor.listenTCP(arguments.port, factory)
 
-logging.info('starting MPD server at port {}'.format(settings.MPD_PORT))
+logging.info('starting MPD server at port {}'.format(arguments.port))
 
 twisted.internet.reactor.run()
