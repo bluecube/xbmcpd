@@ -48,16 +48,6 @@ class XBMCControl(object):
     Implements a simple way to control basic XBMC library functions.
     """
 
-    ALL_FIELDS = [
-        'title',
-        'artist',
-        'genre',
-        'year',
-        'album',
-        'track',
-        'duration',
-        'file']
-    
     SONG_FIELDS = [
         'file',
         'title',
@@ -122,7 +112,7 @@ class XBMCControl(object):
         pllist = []
 
         for f in self.call.Files.GetDirectory(
-            directory=path, fields=self.ALL_FIELDS, media='music')['files']:
+            directory=path, fields=self.SONG_FIELDS, media='music')['files']:
             if f['filetype'] == 'directory':
                 if f['file'].endswith(self.path_sep):
                     dirlist.append(f)
