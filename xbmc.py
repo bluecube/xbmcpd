@@ -114,7 +114,7 @@ class XBMCControl(object):
 
     SUPPORTED_VERSION = 3
 
-    PLAYLIST_TIMEOUT = 3
+    PLAYLIST_TIMEOUT = 2
     LIBRARY_TIMEOUT = 3600
 
     def __init__(self, url, path_sep='/'):
