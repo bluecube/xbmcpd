@@ -17,31 +17,85 @@
 # along with xbmcpd.  If not, see <http://www.gnu.org/licenses/>.
 
 import time
-import functools
+import threading
 
 import jsonrpc.proxy
 from pprint import pprint
 
+class TimedVar:
+    """
+    Recalculating a value at least every n seconds.
+    """
+    
+    def __init__(self, func, timeout, update_thread):
+        self._func = func
+        self._timeout = timeout
+        self._lock = threading.Lock()
+        self._last_update = None
 
-def timed_cache(timeout):
-    def decorator(f):
-        cache = {}
+        self.update()
+
+        update_thread.add_var(self)
+    
+    def set_value(self, value):
+        """
+        Imediately set the value and restart timeout.
+        """
+        with self._lock:
+            self._set_value(value)
+
+    def _set_value(self, value):
+        """
+        Nonlocking version of set_value
+        """
+        self.value = value
+        self._last_update = time.time()
+
+    def _time_remaining(self):
+        if self._last_update is None:
+            return 0
+
+        remaining = self._last_update + self._timeout - time.time()
+            
+        if remaining > 0:
+            return remaining
+        else:
+            return 0
+
+    def update(self):
+        """
+        Imediately recalculate the value, set it and restart timeout.
+        """
+        with self._lock:
+            if self._time_remaining() > 0:
+                return
+
+            self._set_value(self._func())
+
+    def __lt__(self, other):
+        return self._time_remaining() < other._time_remaining()
+
+
+class UpdateThread(threading.Thread):
+    """
+    Thread that periodically updates TimedVars.
+    """
+    def __init__(self):
+        super(UpdateThread, self).__init__()
+        self.daemon = True
+        self._list = []
+
+    def add_var(self, variable):
+        self._list.append(variable)
+
+    def run(self):
+        while(True):
+            self._list.sort()
+            next_var = self._list[0]
+
+            time.sleep(next_var._time_remaining())
+            next_var.update()
         
-        @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            now = time.time()
-
-            key = (f, tuple(args), frozenset(kwargs.items()))
-
-            if key not in cache or cache[key][0] + timeout < now:
-                cache[key] = (now, f(*args, **kwargs))
-                
-            return cache[key][1]
-
-        return wrapper
-
-    return decorator
-
 
 class XBMCControl(object):
     """
@@ -68,6 +122,15 @@ class XBMCControl(object):
 
         self._check_version()
         self.path_sep = path_sep
+
+        self.updater = UpdateThread()
+
+        self.current_playlist = \
+            TimedVar(self._get_current_playlist, self.PLAYLIST_TIMEOUT, self.updater)
+        self.all_songs = \
+            TimedVar(self._get_all_songs, self.LIBRARY_TIMEOUT, self.updater)
+
+        self.updater.start()
         
     def _check_version(self):
         jsonrpc_version = self.call.JSONRPC.Version()['version']
@@ -127,8 +190,7 @@ class XBMCControl(object):
     def list_playlists(self):
         return [] #TODO: Implement this when jsonrpc api supports listing playlists.
 
-    @timed_cache(PLAYLIST_TIMEOUT)
-    def get_current_playlist(self):
+    def _get_current_playlist(self):
         """
         Get the music playlist contents.
 
@@ -170,8 +232,7 @@ class XBMCControl(object):
         """
         self.call.XBMC.SetVolume(int(volume))
 
-    @timed_cache(LIBRARY_TIMEOUT)
-    def list_songs(self):
+    def _get_all_songs(self):
         """
         List of all songs
         """
@@ -274,11 +335,3 @@ class XBMCControl(object):
                 raise
         
             self.playlist_state = None
-
-    def force_playlist_update(self):
-        """
-        Imediately download a new playlist and discard the cached version.
-        To be used with playlist modifying functions.
-        """
-        pass
-        #TODO: Write this function

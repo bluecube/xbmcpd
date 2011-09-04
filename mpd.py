@@ -183,7 +183,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
     @property
     def playlist(self):
-        pl = self.xbmc.get_current_playlist()
+        pl = self.xbmc.current_playlist.value
         if pl != self.last_playlist:
             self.last_playlist = pl;
             self.playlist_id += 1
@@ -435,7 +435,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         playtime = 0
 
-        songs = self.xbmc.list_songs()
+        songs = self.xbmc.all_songs.value
         artists = set()
         albums = set()
 
@@ -500,7 +500,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         song_id = command.args[0].as_int()
         self.xbmc.remove_from_playlist(song_id)
 
-        self.xbmc.force_playlist_update()
+        self.xbmc.current_playlist.update()
 
     def add(self, command):
         """
@@ -510,7 +510,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         path = self._mpd_path_to_xbmc_path(command.args[0])
         self.xbmc.add_to_playlist(path)
 
-        self.xbmc.force_playlist_update()
+        self.xbmc.current_playlist.update()
 
     def addid(self, command):
         """
@@ -529,13 +529,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self.xbmc.insert_into_playlist(position, path)
             self._send_lists([('Id', position)])
 
-        self.xbmc.force_playlist_update()
+        self.xbmc.current_playlist.update()
 
     def clear(self, command):
         command.check_arg_count(0)
         self.xbmc.clear()
 
-        self.xbmc.force_playlist_update()
+        self.xbmc.current_playlist.update()
 
     def next(self, command):
         command.check_arg_count(0)
@@ -643,7 +643,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         def predicate(song):
             return self._filter_predicate(filter_list, operator.eq, song)
 
-        return itertools.ifilter(predicate, self.xbmc.list_songs())
+        return itertools.ifilter(predicate, self.xbmc.all_songs.value)
 
     def _filter_predicate(self, filter_list, compare, song):
         """
@@ -713,7 +713,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         def contains_lcase(a, b):
             return a.lower() in b.lower()
 
-        for song in self.xbmc.list_songs():
+        for song in self.xbmc.all_songs.value:
             if self._filter_predicate(filter_list, contains_lcase, song):
                 self._send_song(song)
 
