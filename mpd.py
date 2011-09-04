@@ -384,7 +384,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         command.check_arg_count(0)
     
         playlist = self.playlist
-        playlist_state = self.xbmc.playlist_state
+        playlist_state = self.xbmc.state.value
         time = self.xbmc.get_time()
         volume = self.xbmc.get_volume()
 
@@ -725,10 +725,10 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         playlist = self.playlist;
 
-        if self.xbmc.playlist_state is None:
+        if self.xbmc.state.value is None:
             return
 
-        current = self.xbmc.playlist_state['current']
+        current = self.xbmc.state.value['current']
         self._send_song(playlist[current], current, current)
 
     def lsinfo(self, command):

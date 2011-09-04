@@ -50,8 +50,6 @@ xbmc = xbmc.XBMCControl(arguments.url, arguments.pathsep)
 mpd.MPD.xbmc = xbmc
 mpd.MPD.musicpath = arguments.musicpath.rstrip(xbmc.path_sep)
 
-logging.debug("downloading library...")
-
 factory = twisted.internet.protocol.ServerFactory()
 factory.protocol = mpd.MPD
 twisted.internet.reactor.listenTCP(arguments.port, factory)

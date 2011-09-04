@@ -18,6 +18,7 @@
 
 import time
 import threading
+import logging
 
 import jsonrpc.proxy
 from pprint import pprint
@@ -37,18 +38,20 @@ class TimedVar:
 
         update_thread.add_var(self)
     
-    def set_value(self, value):
-        """
-        Imediately set the value and restart timeout.
-        """
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self):
         with self._lock:
             self._set_value(value)
 
     def _set_value(self, value):
         """
-        Nonlocking version of set_value
+        Imediately set the value and restart timeout.
         """
-        self.value = value
+        self._value = value
         self._last_update = time.time()
 
     def _time_remaining(self):
@@ -56,7 +59,7 @@ class TimedVar:
             return 0
 
         remaining = self._last_update + self._timeout - time.time()
-            
+        
         if remaining > 0:
             return remaining
         else:
@@ -89,13 +92,15 @@ class UpdateThread(threading.Thread):
         self._list.append(variable)
 
     def run(self):
+        logging.debug("updater thread running")
+
         while(True):
             self._list.sort()
             next_var = self._list[0]
 
             time.sleep(next_var._time_remaining())
             next_var.update()
-        
+
 
 class XBMCControl(object):
     """
@@ -114,7 +119,8 @@ class XBMCControl(object):
 
     SUPPORTED_VERSION = 3
 
-    PLAYLIST_TIMEOUT = 2
+    STATE_TIMEOUT = 1
+    PLAYLIST_TIMEOUT = 5
     LIBRARY_TIMEOUT = 3600
 
     def __init__(self, url, path_sep='/'):
@@ -125,6 +131,8 @@ class XBMCControl(object):
 
         self.updater = UpdateThread()
 
+        self.state = \
+            TimedVar(self._get_state, self.STATE_TIMEOUT, self.updater)
         self.current_playlist = \
             TimedVar(self._get_current_playlist, self.PLAYLIST_TIMEOUT, self.updater)
         self.all_songs = \
@@ -198,9 +206,9 @@ class XBMCControl(object):
         """
         x = self.call.AudioPlaylist.GetItems(fields=self.SONG_FIELDS)
         if 'state' in x:
-            self.playlist_state = x['state'] #TODO: This is ugly.
+            self.state.value = x['state']
         else:
-            self.playlist_state = None
+            self.state.value = None
 
         return x.get('items', [])
 
@@ -322,16 +330,14 @@ class XBMCControl(object):
         """
         self.call.AudioPlaylist.Clear()
 
-    def update_playlist_state(self):
+    def _get_state(self):
         """
-        Forces playlist state update.
-        (otherwise state is updated only in get_current_playlist when
-        cache times out)
+        Updates playlist state.
         """
         try:
-            self.playlist_state = self.call.AudioPlaylist.State()
+            return self.call.AudioPlaylist.State()
         except jsonrpc.common.RPCError as e:
             if e.code != -32602:
                 raise
         
-            self.playlist_state = None
+            return None
