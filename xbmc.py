@@ -21,6 +21,9 @@ import threading
 import logging
 
 import jsonrpc.proxy
+
+import observer
+
 from pprint import pprint
 
 class TimedVar:
@@ -32,9 +35,11 @@ class TimedVar:
         self._func = func
         self._timeout = timeout
         self._lock = threading.Lock()
-        self._last_update = None
 
-        self.update()
+        self.changed = observer.Observable()
+
+        self._last_update = time.time()
+        self._value = func()
 
         update_thread.add_var(self)
     
@@ -51,13 +56,15 @@ class TimedVar:
         """
         Imediately set the value and restart timeout.
         """
-        self._value = value
         self._last_update = time.time()
 
-    def _time_remaining(self):
-        if self._last_update is None:
-            return 0
+        if self._value == value:
+            return
 
+        self.changed()
+        self._value = value
+
+    def _time_remaining(self):
         remaining = self._last_update + self._timeout - time.time()
         
         if remaining > 0:
@@ -122,6 +129,7 @@ class XBMCControl(object):
     STATE_TIMEOUT = 1
     PLAYLIST_TIMEOUT = 5
     LIBRARY_TIMEOUT = 3600
+    VOLUME_TIMEOUT = 2
 
     def __init__(self, url, path_sep='/'):
         self.call = jsonrpc.proxy.JSONRPCProxy.from_url(url)
@@ -133,10 +141,12 @@ class XBMCControl(object):
 
         self.state = \
             TimedVar(self._get_state, self.STATE_TIMEOUT, self.updater)
-        self.current_playlist = \
+        self.playlist = \
             TimedVar(self._get_current_playlist, self.PLAYLIST_TIMEOUT, self.updater)
         self.all_songs = \
             TimedVar(self._get_all_songs, self.LIBRARY_TIMEOUT, self.updater)
+        self.volume = \
+            TimedVar(self._get_volume, self.VOLUME_TIMEOUT, self.updater)
 
         self.updater.start()
         
@@ -164,7 +174,7 @@ class XBMCControl(object):
     def _process_time(self, time):
         return 3600 * time['hours'] + 60 * time['minutes'] + time['seconds']
         
-    def get_volume(self):
+    def _get_volume(self):
         """
         Get the currently set volume.
 
@@ -337,7 +347,7 @@ class XBMCControl(object):
         try:
             return self.call.AudioPlaylist.State()
         except jsonrpc.common.RPCError as e:
-            if e.code != -32602:
+            if e.code != -32100:
                 raise
         
             return None

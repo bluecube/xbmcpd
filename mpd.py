@@ -181,14 +181,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.last_playlist = None
         self.idle_mode = False
 
-    @property
-    def playlist(self):
-        pl = self.xbmc.current_playlist.value
-        if pl != self.last_playlist:
-            self.last_playlist = pl;
-            self.playlist_id += 1
-        return pl
-        
     def _xbmc_path_to_mpd_path(self, path):
         """
         Converts a path that xbmc uses (based at filesystem root)
@@ -279,11 +271,18 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         self.sendLine(encoded)
 
     def connectionMade(self):
-        self._send_line(u'OK MPD 0.16.0')
+        self.xbmc.state.changed.subscribe(self._state_changed)
+        self.xbmc.playlist.changed.subscribe(self._playlist_changed)
+        self.xbmc.volume.changed.subscribe(self._volume_changed)
 
+        self._send_line(u'OK MPD 0.16.0')
         logging.info('Client connected.')
 
     def connectionLost(self, reason):
+        self.xbmc.state.changed.unsubscribe(self._state_changed)
+        self.xbmc.playlist.changed.unsubscribe(self._playlist_changed)
+        self.xbmc.volume.changed.unsubscribe(self._volume_changed)
+
         logging.info('Client disconnected.')
 
     def lineReceived(self, data):
@@ -295,7 +294,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         if self.idle_mode:
             if command.name() == u'noidle':
-                self._noidle([])
+                self._noidle()
         elif command.name() == u'command_list_begin':
             logging.debug(u'command list started')
             self.command_list = []
@@ -331,11 +330,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         self.idle_mode = True
 
-    def _noidle(self, changed):
+    def _noidle(self, *changed):
         """
         Cancel running idle command.
+        If we're not in idle mode, do nothing.
         """
-        assert self.idle_mode
+        if not self.idle_mode:
+            return
 
         logging.debug(u'wake up (' + u', '.join(changed) + u')')
 
@@ -346,7 +347,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def playlistinfo(self, command):
         command.check_arg_count(0, 1)
 
-        playlist = self.playlist
+        playlist = self.xbmc.playlist.value
 
         if len(command.args) == 1:
             limits = command.args[0].as_range()
@@ -369,7 +370,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         we don't care and say that everything is always changed.
         """
         command.check_arg_count(1)
-        for pos, song in enumerate(self.playlist):
+        for pos, song in enumerate(self.xbmc.playlist.value):
             self._send_song(song, pos, pos)
         
     def plchangesposid(self, command):
@@ -379,7 +380,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         we don't care and say that everything is always changed.
         """
         command.check_arg_count(1)
-        for i in range(len(self.playlist)):
+        for i in range(len(self.xbmc.playlist.value)):
             self._send_lists([('cpos', i), ('Id', i)])
 
     def status(self, command):
@@ -388,17 +389,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         command.check_arg_count(0)
     
-        playlist = self.playlist
         playlist_state = self.xbmc.state.value
         time = self.xbmc.get_time()
-        volume = self.xbmc.get_volume()
 
         
         self._send_lists([
-            ('volume', volume),
+            ('volume', self.xbmc.volume.value),
             ('consume', 0),
             ('playlist', self.playlist_id),
-            ('playlistlength', len(playlist))])
+            ('playlistlength', len(self.xbmc.playlist.value))])
 
         if playlist_state is None or time is None:
             self._send_lists([
@@ -497,6 +496,8 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
 
         self.xbmc.set_volume(volume)
 
+        self.xbmc.volume.value = volume
+
     def deleteid(self, command):
         """
         Deletes a song by it's specified id.
@@ -505,7 +506,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         song_id = command.args[0].as_int()
         self.xbmc.remove_from_playlist(song_id)
 
-        self.xbmc.current_playlist.update()
+        self.xbmc.playlist.update()
 
     def add(self, command):
         """
@@ -515,7 +516,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         path = self._mpd_path_to_xbmc_path(command.args[0])
         self.xbmc.add_to_playlist(path)
 
-        self.xbmc.current_playlist.update()
+        self.xbmc.playlist.update()
 
     def addid(self, command):
         """
@@ -526,7 +527,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         path = self._mpd_path_to_xbmc_path(command.args[0])
 
         if len(command.args) == 1:
-            index = len(self.playlist)
+            index = len(self.xbmc.playlist.value)
             self.xbmc.add_to_playlist(path)
             self._send_lists([('Id', index)])
         else:
@@ -534,13 +535,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self.xbmc.insert_into_playlist(position, path)
             self._send_lists([('Id', position)])
 
-        self.xbmc.current_playlist.update()
+        self.xbmc.playlist.update()
 
     def clear(self, command):
         command.check_arg_count(0)
         self.xbmc.clear()
 
-        self.xbmc.current_playlist.update()
+        self.xbmc.playlist.update()
 
     def next(self, command):
         command.check_arg_count(0)
@@ -818,3 +819,15 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def close(self, command):
         command.check_arg_count(0)
         self.transport.loseConnection()
+
+    def _state_changed(self):
+        self._noidle('player')
+
+    def _playlist_changed(self):
+        self.playlist_id += 1
+        self._noidle('playlist')
+            
+    def _volume_changed(self):
+        self._noidle('mixer')
+            
+
