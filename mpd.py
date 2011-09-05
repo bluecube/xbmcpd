@@ -281,6 +281,11 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def connectionMade(self):
         self._send_line(u'OK MPD 0.16.0')
 
+        logging.info('Client connected.')
+
+    def connectionLost(self, reason):
+        logging.info('Client disconnected.')
+
     def lineReceived(self, data):
         """
         Receives data and takes the specified actions.
