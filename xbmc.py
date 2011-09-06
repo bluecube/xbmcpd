@@ -280,18 +280,18 @@ class XBMCControl(object):
 
             self.call.AudioPlaylist.Play()
         else:
-            self.playlist_state.update(result)
+            self.state.value.update(result)
 
     def play(self):
-        self.update_playlist_state()
+        self.state.update()
 
-        if self.playlist_state is None or self.playlist_state['paused']:
+        if self.state.value is None or self.state.value['paused']:
             self.playpause()
 
     def pause(self):
-        self.update_playlist_state()
+        self.state.update()
         
-        if self.playlist_state is None or self.playlist_state['paused']:
+        if self.state.value is None or self.state.value['paused']:
             return
 
         self.playpause()
@@ -302,6 +302,7 @@ class XBMCControl(object):
         the playlist.
         """
         self.call.AudioPlaylist.Remove(pos)
+        self.xbmc.playlist.update()
     
     def add_to_playlist(self, path):
         """
@@ -313,12 +314,13 @@ class XBMCControl(object):
         # it as a directory
         try:
             self.call.AudioPlaylist.Add({'file': path})
-            return
         except jsonrpc.common.RPCError as e:
             if e.code != -32602:
                 raise
 
-        self.call.AudioPlaylist.Add({'directory': path})
+            self.call.AudioPlaylist.Add({'directory': path})
+        finally:
+            self.xbmc.playlist.update()
 
     def insert_into_playlist(self, path, position):
         """
@@ -332,13 +334,16 @@ class XBMCControl(object):
             if e.code != -32602:
                 raise
 
-        self.call.AudioPlaylist.Insert(position, {'directory': path})
+            self.call.AudioPlaylist.Insert(position, {'directory': path})
+        finally:
+            self.xbmc.playlist.update()
 
     def clear(self):
         """
         Clear the current playlist
         """
         self.call.AudioPlaylist.Clear()
+        self.xbmc.playlist.update()
 
     def _get_state(self):
         """

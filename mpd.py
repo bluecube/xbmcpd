@@ -506,8 +506,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         song_id = command.args[0].as_int()
         self.xbmc.remove_from_playlist(song_id)
 
-        self.xbmc.playlist.update()
-
     def add(self, command):
         """
         Adds a specified path to the playlist.
@@ -515,8 +513,6 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         command.check_arg_count(1)
         path = self._mpd_path_to_xbmc_path(command.args[0])
         self.xbmc.add_to_playlist(path)
-
-        self.xbmc.playlist.update()
 
     def addid(self, command):
         """
