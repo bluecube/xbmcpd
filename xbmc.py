@@ -91,7 +91,7 @@ class UpdateThread(threading.Thread):
     Thread that periodically updates TimedVars.
     """
     def __init__(self):
-        super(UpdateThread, self).__init__()
+        super(UpdateThread, self).__init__(name="update thread")
         self.daemon = True
         self._list = []
 
