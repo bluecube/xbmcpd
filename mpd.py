@@ -531,13 +531,9 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
             self.xbmc.insert_into_playlist(position, path)
             self._send_lists([('Id', position)])
 
-        self.xbmc.playlist.update()
-
     def clear(self, command):
         command.check_arg_count(0)
         self.xbmc.clear()
-
-        self.xbmc.playlist.update()
 
     def next(self, command):
         command.check_arg_count(0)
