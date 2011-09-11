@@ -29,10 +29,12 @@ arg_parser = argparse.ArgumentParser(
     description="Controlling XBMC from MPD clients.",
     fromfile_prefix_chars="@")
 
-arg_parser.add_argument('--url', default='http://localhost/jsonrpc',
-    help="URL of the JSONRPC interface (default: %(default)s)")
+arg_parser.add_argument('--xbmc-host', default='localhost',
+    help="address of the xbmc machine. (default: %(default)s)")
+arg_parser.add_argument('--xbmc-port', default=9090, type=int,
+    help="port of the JSON RPC interface. (default: %(default)i)")
 arg_parser.add_argument('--port', '-p', default=6000, type=int,
-    help="port for the MPD server (default: %(default)s)")
+    help="port for the MPD server (default: %(default)i)")
 arg_parser.add_argument('--musicpath', required=True,
     help="root of the music database on the XBMC machine")
 arg_parser.add_argument('--pathsep', default='/',
@@ -46,7 +48,7 @@ logging.basicConfig(level=arguments.verbose, format=u'%(asctime)s %(message)s',
     datefmt=u'%x %X')
 logging.info("XBMCpd starting")
 
-xbmc = xbmc.XBMCControl(arguments.url, arguments.pathsep)
+xbmc = xbmc.XBMCControl(arguments.xbmc_host, arguments.xbmc_port, arguments.pathsep)
 mpd.MPD.xbmc = xbmc
 mpd.MPD.musicpath = arguments.musicpath.rstrip(xbmc.path_sep)
 
