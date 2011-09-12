@@ -302,7 +302,7 @@ class XBMCControl(object):
         the playlist.
         """
         self.call.AudioPlaylist.Remove(pos)
-        self.xbmc.playlist.update()
+        self.playlist.update()
     
     def add_to_playlist(self, path):
         """
@@ -320,7 +320,7 @@ class XBMCControl(object):
 
             self.call.AudioPlaylist.Add({'directory': path})
         finally:
-            self.xbmc.playlist.update()
+            self.playlist.update()
 
     def insert_into_playlist(self, path, position):
         """
@@ -336,14 +336,14 @@ class XBMCControl(object):
 
             self.call.AudioPlaylist.Insert(position, {'directory': path})
         finally:
-            self.xbmc.playlist.update()
+            self.playlist.update()
 
     def clear(self):
         """
         Clear the current playlist
         """
         self.call.AudioPlaylist.Clear()
-        self.xbmc.playlist.update()
+        self.playlist.update()
 
     def _get_state(self):
         """
