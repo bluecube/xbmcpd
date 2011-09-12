@@ -30,9 +30,9 @@ arg_parser = argparse.ArgumentParser(
     fromfile_prefix_chars="@")
 
 arg_parser.add_argument('--xbmc-host', default='localhost',
-    help="address of the xbmc machine. (default: %(default)s)")
+    help="address of the xbmc machine (default: %(default)s)")
 arg_parser.add_argument('--xbmc-port', default=9090, type=int,
-    help="port of the JSON RPC interface. (default: %(default)i)")
+    help="port of the JSON RPC interface (default: %(default)i)")
 arg_parser.add_argument('--port', '-p', default=6000, type=int,
     help="port for the MPD server (default: %(default)i)")
 arg_parser.add_argument('--musicpath', required=True,
