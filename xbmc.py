@@ -20,7 +20,7 @@ import time
 import threading
 import logging
 
-import jsonrpc20_tcp
+import jsonrpc.proxy
 
 import observer
 
@@ -99,6 +99,8 @@ class UpdateThread(threading.Thread):
         self._list.append(variable)
 
     def run(self):
+        logging.debug("updater thread running")
+
         while(True):
             self._list.sort()
             next_var = self._list[0]
@@ -129,10 +131,8 @@ class XBMCControl(object):
     LIBRARY_TIMEOUT = 3600
     VOLUME_TIMEOUT = 2
 
-    def __init__(self, host, port, path_sep='/'):
-        logging.debug('connecting to XBMC')
-        self._jsonrpc = jsonrpc20_tcp.JsonRPC(host, port)
-        self.call = self._jsonrpc.call_proxy
+    def __init__(self, url, path_sep='/'):
+        self.call = jsonrpc.proxy.JSONRPCProxy.from_url(url)
 
         self._check_version()
         self.path_sep = path_sep
@@ -163,7 +163,7 @@ class XBMCControl(object):
         """
         try:
             time = self.call.AudioPlayer.GetTime()
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
 
@@ -240,7 +240,7 @@ class XBMCControl(object):
         """
         try:
             self.call.AudioPlayer.Stop()
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
 
@@ -274,7 +274,7 @@ class XBMCControl(object):
         """
         try:
             result = self.call.AudioPlayer.PlayPause()
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
 
@@ -314,7 +314,7 @@ class XBMCControl(object):
         # it as a directory
         try:
             self.call.AudioPlaylist.Add({'file': path})
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32602:
                 raise
 
@@ -330,7 +330,7 @@ class XBMCControl(object):
         try:
             self.call.AudioPlaylist.Insert(position, {'file': path})
             return
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32602:
                 raise
 
@@ -351,7 +351,7 @@ class XBMCControl(object):
         """
         try:
             return self.call.AudioPlaylist.State()
-        except jsonrpc20_tcp.JsonRPCException as e:
+        except jsonrpc.common.RPCError as e:
             if e.code != -32100:
                 raise
         
