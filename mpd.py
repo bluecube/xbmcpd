@@ -289,8 +289,16 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         Receives data and takes the specified actions.
         """
-
-        command = Command(data.rstrip('\r').decode(u'utf8'), self)
+        try:
+            data = data.decode(u'utf8')
+        except UnicodeError:
+            logging.warning(u'Invalid utf-8.')
+            self._send_line(unicode(MPDError(
+                self, MPDError.ACK_ERROR_SYSTEM, u'Invalid utf-8.')))
+            return
+        data = data.rstrip(u'\r')
+            
+        command = Command(data, self)
 
         if self.idle_mode:
             if command.name() == u'noidle':
