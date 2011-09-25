@@ -729,7 +729,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         """
         command.check_arg_count(0)
 
-        playlist = self.playlist;
+        playlist = self.xbmc.playlist.value
 
         if self.xbmc.state.value is None:
             return
