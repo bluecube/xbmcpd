@@ -31,7 +31,7 @@ arg_parser = argparse.ArgumentParser(
 
 arg_parser.add_argument('--url', default='http://localhost/jsonrpc',
     help="URL of the JSONRPC interface (default: %(default)s)")
-arg_parser.add_argument('--port', '-p', default=6000, type=int,
+arg_parser.add_argument('--port', '-p', default=6600, type=int,
     help="port for the MPD server (default: %(default)s)")
 arg_parser.add_argument('--musicpath', required=True,
     help="root of the music database on the XBMC machine")
