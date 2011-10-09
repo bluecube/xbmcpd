@@ -356,3 +356,6 @@ class XBMCControl(object):
                 raise
         
             return None
+    
+    def shuffle(self):
+        self.call.AudioPlaylist.Shuffle()

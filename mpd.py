@@ -152,7 +152,7 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
         'list', 'count', 'command_list_ok_begin',
         'command_list_end', 'commands', 'close',
         'notcommands', 'outputs', 'tagtypes',
-        'playid','stop','seek', 'playlistinfo', 'playlistid',
+        'playid','stop','seek', 'shuffle', 'playlistinfo', 'playlistid',
         'plchanges', 'plchangesposid', 'idle',
         'listall', 'listallinfo'}
 
@@ -830,4 +830,13 @@ class MPD(twisted.protocols.basic.LineOnlyReceiver):
     def _volume_changed(self):
         self._noidle('mixer')
             
+    def shuffle(self, command):
+        """
+        Shuffle current playlist. The range parameter is not supported.
+        """
+        command.check_arg_count(0, 1)
 
+        if len(command.args) > 0:
+            raise MPDError(self, MPDError.ACK_ERROR_SYSTEM, u'Range argument is not implemented.')))
+        
+        self.xbmc.shuffle()
